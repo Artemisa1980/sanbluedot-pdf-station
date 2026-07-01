@@ -8,6 +8,7 @@ interface Props {
   selected: boolean;
   dropSide: "left" | "right" | null;
   onSelect: (e: MouseEvent) => void;
+  onOpen: () => void; // doble clic → vista individual
   onDragStart: (e: DragEvent) => void;
   onDragOver: (e: DragEvent) => void;
   onDrop: (e: DragEvent) => void;
@@ -23,6 +24,7 @@ export function PageCard({
   selected,
   dropSide,
   onSelect,
+  onOpen,
   onDragStart,
   onDragOver,
   onDrop,
@@ -39,6 +41,7 @@ export function PageCard({
       }}
       draggable
       onClick={onSelect}
+      onDoubleClick={onOpen}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import { newId } from "../state/store";
 import { getPageSizePt, renderPageDataUrl } from "../engine/thumbnails";
 import type { PageRef, Patch } from "../../../shared/types";
@@ -74,7 +75,7 @@ export function PatchEditor({ page, bytes, initial, onSave, onDelete, onClose }:
   const fontPx = pagePt ? fontSize * (PREVIEW_W / pagePt.width) : fontSize;
   const canSave = rect !== null;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-6"
       style={{ background: "rgba(0,0,0,0.45)" }}
@@ -214,6 +215,7 @@ export function PatchEditor({ page, bytes, initial, onSave, onDelete, onClose }:
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

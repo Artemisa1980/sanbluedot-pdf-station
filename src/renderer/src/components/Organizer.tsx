@@ -9,15 +9,24 @@ export function Organizer() {
   const { project, selection, dispatch } = useStation();
   const [dragIds, setDragIds] = useState<string[] | null>(null);
   const [drop, setDrop] = useState<{ index: number; side: "left" | "right" } | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null); // vista individual estilo Adobe
 
   const pages = project.pages;
+  const detailPage = detailId ? pages.find((p) => p.id === detailId) ?? null : null;
+
+  // Si la página vista en detalle desaparece (eliminada), volver a la grilla
+  useEffect(() => {
+    if (detailId && !pages.some((p) => p.id === detailId)) setDetailId(null);
+  }, [detailId, pages]);
 
   // Atajos: Delete elimina la selección, Cmd/Ctrl+A selecciona todo
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const t = e.target as HTMLElement;
       if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable) return;
-      if ((e.key === "Delete" || e.key === "Backspace") && selection.length > 0) {
+      if (e.key === "Escape" && detailId) {
+        setDetailId(null);
+      } else if ((e.key === "Delete" || e.key === "Backspace") && selection.length > 0) {
         e.preventDefault();
         dispatch({ type: "removePages", ids: selection });
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {
@@ -27,7 +36,12 @@ export function Organizer() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selection, pages, dispatch]);
+  }, [selection, pages, dispatch, detailId]);
+
+  function openDetail(id: string) {
+    setDetailId(id);
+    dispatch({ type: "select", ids: [id] });
+  }
 
   function handleSelect(e: MouseEvent, page: PageRef, index: number) {
     e.stopPropagation();
@@ -99,6 +113,11 @@ export function Organizer() {
         style={{ background: "var(--panel-header)", borderColor: "var(--border)" }}
         onClick={(e) => e.stopPropagation()}
       >
+        {detailPage && (
+          <button className="btn-ghost" onClick={() => setDetailId(null)} title="Volver a la grilla (Esc)">
+            ▦ Grilla
+          </button>
+        )}
         {btn("↺", "Rotar 90° a la izquierda", () => dispatch({ type: "rotatePages", ids: selection, delta: -90 }))}
         {btn("↻", "Rotar 90° a la derecha", () => dispatch({ type: "rotatePages", ids: selection, delta: 90 }))}
         {btn("Duplicar", "Duplicar selección", () => dispatch({ type: "duplicatePages", ids: selection }))}
@@ -138,7 +157,59 @@ export function Organizer() {
         </div>
       </div>
 
-      {/* Grilla de páginas */}
+      {/* Vista individual estilo Adobe: carril de miniaturas + página grande */}
+      {detailPage ? (
+        <div className="flex min-h-0 flex-1" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="flex w-[132px] shrink-0 flex-col gap-2 overflow-auto border-r p-2"
+            style={{ borderColor: "var(--border)", background: "var(--panel-bg)" }}
+          >
+            {pages.map((p, i) => {
+              const src = sourceFor(project, p);
+              if (!src) return null;
+              return (
+                <button
+                  key={p.id}
+                  className="rounded-md border-2 p-0.5"
+                  style={{ borderColor: p.id === detailId ? "var(--accent)" : "transparent" }}
+                  onClick={() => openDetail(p.id)}
+                >
+                  <Thumbnail
+                    srcId={p.srcId}
+                    bytes={src.bytes}
+                    pageIndex={p.pageIndex}
+                    rotation={p.rotation}
+                    background={p.background}
+                    width={110}
+                  />
+                  <div className="text-[9px]" style={{ fontFamily: "var(--mono)", color: "var(--text-muted)" }}>
+                    {i + 1}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex min-w-0 flex-1 items-start justify-center overflow-auto p-6">
+            {(() => {
+              const src = sourceFor(project, detailPage);
+              if (!src) return null;
+              return (
+                <div className="w-full max-w-[820px]" style={{ boxShadow: "var(--shadow-lg)" }}>
+                  <Thumbnail
+                    srcId={detailPage.srcId}
+                    bytes={src.bytes}
+                    pageIndex={detailPage.pageIndex}
+                    rotation={detailPage.rotation}
+                    background={detailPage.background}
+                    width={820}
+                  />
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      ) : (
       <div className="min-h-0 flex-1 overflow-auto p-4">
         {pages.length === 0 ? (
           <div
@@ -163,6 +234,7 @@ export function Organizer() {
                   selected={selection.includes(p.id)}
                   dropSide={drop?.index === i ? drop.side : null}
                   onSelect={(e) => handleSelect(e, p, i)}
+                  onOpen={() => openDetail(p.id)}
                   onDragStart={(e) => handleDragStart(e, p)}
                   onDragOver={(e) => handleDragOver(e, i)}
                   onDrop={(e) => handleDrop(e, i)}
@@ -182,6 +254,7 @@ export function Organizer() {
           </div>
         )}
       </div>
+      )}
     </section>
   );
 }

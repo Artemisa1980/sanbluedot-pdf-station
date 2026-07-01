@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Thumbnail } from "./Thumbnail";
 import { getPageCount } from "../engine/thumbnails";
 
@@ -36,7 +37,7 @@ export function PagePicker({ name, srcId, bytes, onConfirm, onClose }: Props) {
     });
   }
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-8"
       style={{ background: "rgba(0,0,0,0.45)" }}
@@ -129,6 +130,7 @@ export function PagePicker({ name, srcId, bytes, onConfirm, onClose }: Props) {
           </div>
         </footer>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -3,6 +3,9 @@ import { DocEditor } from "./components/DocEditor";
 import { Inspector } from "./components/Inspector";
 import { Organizer } from "./components/Organizer";
 import { Sidebar } from "./components/Sidebar";
+import { exportProject } from "./engine/exportProject";
+import { useStation } from "./state/store";
+import { bytesToB64 } from "../../shared/b64";
 
 function useTheme() {
   const [dark, setDark] = useState(() => localStorage.getItem("station-theme") === "dark");
@@ -18,6 +21,44 @@ export default function App() {
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [showLeft, setShowLeft] = useState(true);
   const [showRight, setShowRight] = useState(true);
+  const { project } = useStation();
+  const [exporting, setExporting] = useState(false);
+  const [toast, setToast] = useState<{ kind: "ok" | "error"; msg: string } | null>(null);
+
+  function showToast(kind: "ok" | "error", msg: string) {
+    setToast({ kind, msg });
+    setTimeout(() => setToast(null), 5000);
+  }
+
+  // Red de seguridad: ningún error de runtime vuelve a fallar en silencio
+  useEffect(() => {
+    function onError(e: ErrorEvent) {
+      showToast("error", `Error interno: ${e.message}`);
+    }
+    function onRejection(e: PromiseRejectionEvent) {
+      const msg = e.reason instanceof Error ? e.reason.message : String(e.reason);
+      showToast("error", `Error interno: ${msg}`);
+    }
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+    };
+  }, []);
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const bytes = await exportProject(project);
+      const saved = await window.station.exportPdfDialog(`${project.name}.pdf`, bytesToB64(bytes));
+      if (saved) showToast("ok", "PDF exportado — vectorial, nítido, tuyo.");
+    } catch (e) {
+      showToast("error", e instanceof Error ? e.message : "Error al exportar.");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
@@ -32,6 +73,15 @@ export default function App() {
           <span className="section-label">retro PDF station</span>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            className="btn-ghost"
+            style={{ borderColor: "var(--accent)", background: "var(--accent-soft)", fontWeight: 700 }}
+            disabled={exporting || project.pages.length === 0}
+            onClick={handleExport}
+            title="Fusionar todo el documento en un PDF vectorial"
+          >
+            {exporting ? "Exportando…" : "⚡ EXPORTAR PDF"}
+          </button>
           <button
             className="btn-ghost"
             style={showLeft ? { borderColor: "var(--accent)" } : undefined}
@@ -63,8 +113,23 @@ export default function App() {
           <Organizer />
         )}
 
-        {showRight && !editingDocId && <Inspector />}
+        {showRight && <Inspector />}
       </main>
+
+      {toast && (
+        <div
+          className="fixed right-4 bottom-4 z-50 max-w-[360px] rounded-lg border px-4 py-3 text-[12px]"
+          style={{
+            fontFamily: "var(--mono)",
+            background: "var(--panel-bg)",
+            color: toast.kind === "error" ? "var(--danger)" : "var(--text)",
+            borderColor: toast.kind === "error" ? "var(--danger)" : "var(--accent)",
+            boxShadow: "var(--shadow-lg)"
+          }}
+        >
+          {toast.msg}
+        </div>
+      )}
     </div>
   );
 }
