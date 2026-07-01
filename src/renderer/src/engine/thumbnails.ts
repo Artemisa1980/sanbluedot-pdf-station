@@ -28,6 +28,18 @@ export async function getPageCount(srcId: string, bytes: Uint8Array): Promise<nu
   return (await docFor(srcId, bytes)).numPages;
 }
 
+/** Dimensiones reales de la página en puntos PDF — para escalar overlays con exactitud. */
+export async function getPageSizePt(
+  srcId: string,
+  bytes: Uint8Array,
+  pageIndex: number
+): Promise<{ width: number; height: number }> {
+  const doc = await docFor(srcId, bytes);
+  const page = await doc.getPage(pageIndex + 1);
+  const vp = page.getViewport({ scale: 1 });
+  return { width: vp.width, height: vp.height };
+}
+
 export function renderPageDataUrl(
   srcId: string,
   bytes: Uint8Array,

@@ -1,0 +1,191 @@
+/* ============================================================
+   sanbluedot-pdf.css  —  retro dev-station
+   Hoja de estilos para exportar .md → PDF con yzane.markdown-pdf
+   Marca: sanblueᵈᵒᵗ  ·  © Sandy E. Quintero
+   (en texto plano el wordmark es "sanbluedot" — el dot va
+    en superscript solo en superficies web/PDF/HTML)
+   dot #7CB3E8 (siempre) · sanblue navy #16213E · gold #EFC15E
+   ============================================================ */
+
+:root {
+  --navy:  #16213E;   /* sanblue (sobre claro) + texto fuerte */
+  --dot:   #7CB3E8;   /* el "dot" — SIEMPRE este azul        */
+  --gold:  #EFC15E;   /* acento decorativo                   */
+  --ink:   #232a3a;   /* cuerpo de texto                     */
+  --muted: #5b6472;   /* tagline, copyright, notas            */
+  --rule:  #d8dee9;   /* líneas suaves                        */
+  --code-bg:   #f5f7fb;
+  --inline-bg: #eef2f8;
+
+  --serif: "Charter", "Bitstream Charter", "Sitka Text", Georgia, "Times New Roman", serif;
+  --mono:  "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, "Courier New", monospace;
+}
+
+/* ---------- Base / tipografía (cuerpo académico) ---------- */
+body {
+  font-family: var(--serif);
+  font-size: 9.5pt;
+  line-height: 1.4;
+  color: var(--ink);
+  background: #ffffff;
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+p { margin: 0 0 0.6rem; }
+
+a {
+  color: #2b5fa8;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(124, 179, 232, 0.6);
+}
+
+strong { color: var(--navy); font-weight: 700; }
+em { color: inherit; }
+
+sup, sub { font-size: 0.72em; line-height: 0; }
+sup { vertical-align: super; }
+sub { vertical-align: sub; }
+
+/* ---------- Encabezados (jerarquía dev-station) ---------- */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--mono);
+  color: var(--navy);
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 1.3rem 0 0.5rem;
+  letter-spacing: -0.01em;
+  break-after: avoid;
+}
+h1 {
+  font-size: 16pt;
+  border-bottom: 3px solid var(--gold);
+  padding-bottom: 0.3rem;
+  margin-top: 0.6rem;
+}
+h2 {
+  font-size: 12pt;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 0.2rem;
+}
+h3 { font-size: 11pt; }
+h4 { font-size: 10pt; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* ---------- Listas ---------- */
+ul, ol { padding-left: 1.4rem; margin: 0 0 0.6rem; }
+li { margin: 0.16rem 0; }
+
+/* ---------- Citas ---------- */
+blockquote {
+  margin: 1rem 0;
+  padding: 0.5rem 1.1rem;
+  border-left: 4px solid var(--gold);
+  background: #fffdf6;
+  color: #4a4f5a;
+}
+blockquote p:last-child { margin-bottom: 0; }
+
+/* ---------- Código (terminal retro, en claro) ---------- */
+code {
+  font-family: var(--mono);
+  font-size: 0.92em;
+  background: var(--inline-bg);
+  color: var(--navy);
+  padding: 0.12em 0.36em;
+  border-radius: 3px;
+}
+pre {
+  background: var(--code-bg);
+  border: 1px solid #e1e7f0;
+  border-left: 4px solid var(--dot);
+  border-radius: 6px;
+  padding: 0.9rem 1.1rem;
+  white-space: pre-wrap;      /* envuelve líneas largas — un PDF no tiene scroll */
+  overflow-wrap: break-word;
+  word-break: break-word;
+  break-inside: avoid;
+}
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+  font-size: 10pt;
+  line-height: 1.5;
+}
+
+/* ---------- Tablas de contenido ---------- */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  font-size: 10.5pt;
+  break-inside: auto;  /* permite dividir la tabla entre páginas si es muy larga */
+  break-before: avoid; /* no dejar un salto de página justo antes de la tabla (evita el hueco en blanco) */
+}
+thead { display: table-header-group; } /* repite los encabezados en la página nueva al dividirse */
+tr { break-inside: avoid; } /* no corta una fila a la mitad */
+th, td { border: 1px solid var(--rule); padding: 0.5rem 0.7rem; text-align: left; vertical-align: top; }
+th { background: var(--navy); color: #ffffff; font-family: var(--mono); font-weight: 600; }
+tr:nth-child(even) td { background: #f6f8fc; }
+
+/* ---------- Reglas / imágenes ---------- */
+hr { border: 0; border-top: 1px solid var(--rule); margin: 2rem 0; }
+img { max-width: 100%; height: auto; break-inside: avoid; }
+
+/* ============================================================
+   FIRMA sanblueᵈᵒᵗ  —  masthead (header) + footer
+   ============================================================ */
+
+/* Wordmark reutilizable: <span class="brand">sanblue<sup class="dot">dot</sup></span> */
+.brand {
+  font-family: var(--mono);
+  font-weight: 700;
+  color: var(--navy);
+  letter-spacing: -0.01em;
+}
+.brand sup.dot, sup.dot { color: var(--dot); font-weight: 700; font-size: 0.6em; }
+
+/* Header: masthead partido (logo izq. / tagline der.), ancho completo, sin flexbox */
+.masthead { width: 100%; border-bottom: 1px solid var(--navy); margin: 0 0 1.3rem; break-after: avoid; }
+.masthead, .masthead tr, .masthead td { border-collapse: collapse; }
+.masthead td { border: none; background: none; padding: 0 0 0.28rem; }
+.masthead .brand-cell { text-align: left; font-size: 6.5pt; }
+.masthead .tagline-cell {
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 6pt;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+/* Footer: firma discreta y profesional (línea fina, centrada) */
+.site-footer {
+  text-align: center;
+  border-top: 1px solid var(--rule);
+  margin-top: 2.6rem;
+  padding-top: 0.9rem;
+  font-family: var(--mono);
+  font-size: 9pt;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  break-inside: avoid;
+  break-before: avoid;        /* evita que el footer quede huérfano en página nueva */
+  page-break-before: avoid;
+}
+.site-footer .brand { font-size: 10pt; }
+.site-footer .copyright {
+  display: block;
+  color: var(--muted);
+  font-size: 8pt;
+  margin-top: 0.3rem;
+}
+
+/* Fuerza la fidelidad de fondos/colores al imprimir el PDF (th navy, code, blockquote,
+   firma). Redundante si yzane tiene printBackground:true, pero hace el CSS autosuficiente. */
+@media print {
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

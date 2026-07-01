@@ -1,18 +1,9 @@
 import { useEffect, useState, type DragEvent, type MouseEvent } from "react";
 import { useStation } from "../state/store";
-import { bytesFor } from "../engine/bytesCache";
+import { sourceFor } from "../engine/sources";
 import { PageCard } from "./PageCard";
 import { Thumbnail } from "./Thumbnail";
-import type { MarginPreset, PageRef, PageSize, StationProject } from "../../../shared/types";
-
-function sourceFor(project: StationProject, p: PageRef): { name: string; bytes: Uint8Array } | null {
-  if (p.srcKind === "pdf") {
-    const pdf = project.pdfs.find((x) => x.id === p.srcId);
-    return pdf ? { name: pdf.name.replace(/\.pdf$/i, ""), bytes: bytesFor(pdf.id, pdf.bytesB64) } : null;
-  }
-  const doc = project.docs.find((x) => x.id === p.srcId);
-  return doc?.compiledB64 ? { name: doc.name, bytes: bytesFor(doc.id, doc.compiledB64) } : null;
-}
+import type { MarginPreset, PageRef, PageSize } from "../../../shared/types";
 
 export function Organizer() {
   const { project, selection, dispatch } = useStation();
