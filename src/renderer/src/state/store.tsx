@@ -37,7 +37,7 @@ export type Action =
   | { type: "insertPages"; pageRefs: PageRef[]; atIndex: number }
   | { type: "removePages"; ids: string[] }
   | { type: "duplicatePages"; ids: string[] }
-  | { type: "reorderPage"; fromIndex: number; toIndex: number }
+  | { type: "movePages"; ids: string[]; toIndex: number }
   | { type: "rotatePages"; ids: string[]; delta: 90 | -90 }
   | { type: "setBackground"; ids: string[]; color: string | null }
   | { type: "addPatch"; pageId: string; patch: Patch }
@@ -175,20 +175,18 @@ function reducer(state: StationState, action: Action): StationState {
       return { selection: newIds, project: { ...project, pages } };
     }
 
-    case "reorderPage": {
-      const { fromIndex, toIndex } = action;
-      if (
-        fromIndex === toIndex ||
-        fromIndex < 0 ||
-        fromIndex >= project.pages.length ||
-        toIndex < 0 ||
-        toIndex > project.pages.length
-      ) {
-        return state;
+    case "movePages": {
+      // Mueve un bloque (en su orden visual actual) a toIndex — índice referido al array ANTES de extraer el bloque
+      const wanted = new Set(action.ids);
+      const moving = project.pages.filter((p) => wanted.has(p.id));
+      if (moving.length === 0) return state;
+      const rest = project.pages.filter((p) => !wanted.has(p.id));
+      let at = 0;
+      const limit = Math.max(0, Math.min(action.toIndex, project.pages.length));
+      for (let i = 0; i < limit; i++) {
+        if (!wanted.has(project.pages[i].id)) at++;
       }
-      const pages = [...project.pages];
-      const [moved] = pages.splice(fromIndex, 1);
-      pages.splice(toIndex > fromIndex ? toIndex - 1 : toIndex, 0, moved);
+      const pages = [...rest.slice(0, at), ...moving, ...rest.slice(at)];
       return { ...state, project: { ...project, pages } };
     }
 
