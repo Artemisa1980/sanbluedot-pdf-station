@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════
+   Paleta sanblueᵈᵒᵗ — heredada del v3
+   ═══════════════════════════════════ */
+:root {
+  /* UI Chrome — Claro (default) */
+  --app-bg: #eef2ef;
+  --panel-bg: #ffffff;
+  --panel-header: #f3f6f4;
+  --border: rgba(45, 53, 48, 0.12);
+  --border-hover: #7cb3e8;
+  --text: #2d3530;
+  --text-muted: #6b7c6e;
+  --text-label: #4a5650;
+  --accent: #7cb3e8; /* dot blue — SIEMPRE */
+  --accent-soft: rgba(124, 179, 232, 0.12);
+  --accent-hover: #93c4f0;
+  --gold: #efc15e;
+  --navy: #16213e;
+  --danger: #c0392b;
+  --danger-soft: rgba(192, 57, 43, 0.08);
+  --input-bg: #f7f9f7;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --radius: 8px;
+  --radius-sm: 5px;
+  --scrollbar: rgba(45, 53, 48, 0.25);
+
+  /* Fuentes de marca */
+  --mono: "Fira Code", Menlo, Consolas, monospace;
+  --serif: "Instrument Serif", Georgia, serif;
+  --sans: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Tema oscuro */
+.dark {
+  --app-bg: #0f1411;
+  --panel-bg: #1a211d;
+  --panel-header: #212b24;
+  --border: rgba(124, 179, 232, 0.14);
+  --text: #dde5df;
+  --text-muted: #7d8e81;
+  --text-label: #9aaa9e;
+  --accent-soft: rgba(124, 179, 232, 0.1);
+  --input-bg: #222b25;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --scrollbar: rgba(124, 179, 232, 0.3);
+}
+
+body {
+  background: var(--app-bg);
+  color: var(--text);
+  font-family: var(--sans);
+  transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* ═══════════════════════════════════
+   Piezas de marca / utilidades UI
+   ═══════════════════════════════════ */
+
+/* Wordmark: sanblue<sup>dot</sup> — sup real, jamás flexbox */
+.brand {
+  font-family: var(--mono);
+  font-weight: 700;
+  color: var(--navy);
+  letter-spacing: -0.01em;
+}
+.dark .brand { color: var(--gold); }
+.brand sup { color: var(--accent); font-weight: 700; font-size: 0.6em; vertical-align: super; }
+
+.section-label {
+  font-family: var(--mono);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--text-label);
+}
+
+.btn-ghost {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-label);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  background: transparent;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+}
+.btn-ghost:hover { border-color: var(--accent); color: var(--text); }
