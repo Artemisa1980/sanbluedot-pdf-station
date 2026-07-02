@@ -1,0 +1,33 @@
+appId: com.sanbluedot.pdfstation
+productName: sanblueᵈᵒᵗ pdf-station
+
+directories:
+  output: release
+  buildResources: resources
+
+files:
+  - out/**
+  - package.json
+
+# Sin firma de Apple (uso personal, no App Store) — al abrir por primera vez:
+# clic derecho → Abrir, o Ajustes del Sistema → Privacidad y seguridad → Abrir igualmente
+mac:
+  identity: null
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch: [arm64]
+
+dmg:
+  title: sanblueᵈᵒᵗ pdf-station
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
+npmRebuild: false

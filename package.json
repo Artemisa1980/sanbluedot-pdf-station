@@ -2,6 +2,8 @@
   "name": "sanbluedot-pdf-station",
   "productName": "sanblueᵈᵒᵗ pdf-station",
   "version": "1.0.0",
+  "description": "retro pdf-station — estación PDF personal, vectorial y offline",
+  "author": "Sandy E. Quintero",
   "private": true,
   "main": "./out/main/index.js",
   "scripts": {
