@@ -1,69 +1,95 @@
 # sanblueᵈᵒᵗ pdf-station
 
-**retro pdf-station** — la estación PDF personal de Sandy E. Quintero.
-App de escritorio (Mac + Windows) para armar, editar y exportar documentos PDF
-**sin rasterizar jamás**: todo lo que sale de aquí es vectorial, nítido como Adobe.
+**retro pdf-station** — a personal desktop PDF studio, built by Sandy E. Quintero.
+Cross-platform app (Mac + Windows, single codebase) to compose, style and export PDF
+documents that are **never rasterized**: everything that leaves this station is true
+vector output, razor-sharp at any zoom — Adobe-grade selectable text.
 
-## Qué hace
+> The UI is in Spanish by design (it is a personal working tool); the codebase,
+> this README and the releases are in English.
 
-- **Importar PDFs** y elegir hoja por hoja cuáles entran al documento (las páginas
-  ajenas son *láminas*: se copian intactas con `copyPages`, nunca se re-renderizan).
-- **Escribir documentos propios** en Markdown o HTML con presets de estilo
-  (sanbluedot · sage · crema · noche) y compilarlos a PDF vectorial vía Chromium.
-- **Organizar**: arrastrar, rotar, duplicar, eliminar páginas; vista en cuadrícula
-  o vista individual estilo Adobe (doble clic sobre una página).
-- **Estética por página**: color de fondo (capa debajo del contenido, el original
-  no se toca) y **parches** (rectángulos de color con texto opcional encima).
-- **Exportar** todo a un solo PDF vectorial.
-- **Guardar el proyecto** completo como `.sbstation` (Cmd+S / Cmd+O) y retomarlo después.
+## What it does
 
-La firma sanblueᵈᵒᵗ vive **dentro del contenido** de cada documento (masthead +
-footer en el propio MD/HTML) — la app no la inyecta.
+- **Import PDFs** and pick page-by-page which sheets enter the master document.
+  Imported pages are treated as *plates*: copied intact with `copyPages`, never
+  re-rendered, never reflowed — the #1 way editors damage documents.
+- **Write your own content** in Markdown or HTML. Own content is compiled to vector
+  PDF through Chromium's print engine and **stays editable forever** — you edit the
+  source and recompile, never the output.
+- **Live styling per document**: base presets (sanbluedot · sage · cream · night) plus
+  granular control — 12 curated embedded typefaces, size, line height, text/paper
+  colors, table headers. Changing a style **recompiles the document automatically in
+  any view**, so the master document and the export can never drift out of sync.
+- **Full-bleed colored paper**: dark/colored sheets are painted edge to edge with an
+  automatic vector layer (Chromium never paints page margins — the station does).
+- **Organize**: drag & drop, rotate, duplicate, delete; grid view or an Adobe-style
+  continuous reader with a synced thumbnail rail and lazy rendering (smooth at 100+ pages).
+- **Per-page aesthetics on imported PDFs**: background color layers and **patches**
+  (colored rectangles with optional text) — the original content is never rewritten.
+- **Insert images** with one click: the editor generates the correctly encoded
+  absolute `file://` URL for you (relative paths don't survive compilation).
+- **Export** the whole master document to a single vector PDF — or convert just the
+  current MD/HTML document straight to PDF from the editor (quick-convert).
+- **Project files**: save everything as `.sbstation` (Cmd+S / Cmd+O) and resume later.
+- **Work protection**: dirty-state tracking, unsaved-changes guards on open/close,
+  and debounced editor sync — nothing lives only in a text box.
 
-### Limitación conocida (v1)
+The sanblueᵈᵒᵗ signature lives **inside each document's content** (masthead + footer
+in the MD/HTML itself) — the app never injects it.
 
-Si un PDF importado trae rotación interna (`/Rotate` en la página) **y además** se le
-aplica fondo o parche, la capa incrustada puede no respetar esa rotación (comportamiento
-de `embedPdf` en pdf-lib). El camino puro (sin fondo/parches) no tiene este problema.
-Solución si aparece: quitar el fondo de esa página o rotarla desde el organizador.
+### Known limitation
 
-## Principios (framework.md en la carpeta padre)
+If an imported PDF page carries internal rotation (`/Rotate`) **and** you apply a
+background or patch to it, the embedded layer may not honor that rotation
+(`embedPdf` behavior in pdf-lib). The pure path (no background/patches) is unaffected.
+Workaround: remove the background on that page, or rotate it from the organizer.
 
-1. Nunca rasterizar. 2. El contenido propio es editable para siempre.
-3. Los PDFs ajenos son láminas. 4. Cero distorsión. 5. Offline y local — nada sale de la máquina.
+## Principles (the project's law — see `framework.md`)
 
-## Desarrollo
+1. **Never rasterize.** 2. **Own content stays editable forever.**
+3. **Foreign PDFs are plates** — organized, layered, never rewritten.
+4. **Zero distortion** — mixed page sizes coexist untouched. 5. **Offline & local** — nothing leaves the machine.
+
+## Development
 
 ```bash
 npm install
-npm run dev        # electron-vite dev --watch (recarga sola)
-npm run lint       # tsc --noEmit (web + node) — no hay suite de tests
+npm run dev        # electron-vite dev --watch (hot reload)
+npm run lint       # tsc --noEmit (web + node) — verification is typecheck + running the app
 ```
 
-## Empaquetar
+## Packaging
 
 ```bash
-npm run dist:mac   # → release/sanblueᵈᵒᵗ pdf-station-1.0.0-arm64.dmg
-npm run dist:win   # → release/ instalador NSIS (correr en Windows)
+npm run dist:mac   # → release/sanblueᵈᵒᵗ pdf-station-<version>-arm64.dmg
+npm run dist:win   # → release/ NSIS installer (run on Windows)
 ```
 
-La app no está firmada por Apple (uso personal): la primera vez, **clic derecho →
-Abrir**, o Ajustes del Sistema → Privacidad y seguridad → "Abrir igualmente".
+The app is not Apple-signed (personal use): on first launch, **right-click → Open**,
+or System Settings → Privacy & Security → "Open Anyway".
 
 ## Stack
 
 Electron + electron-vite · React 19 + TypeScript · Tailwind 4 ·
-pdf-lib (motor vectorial) · pdfjs-dist (solo miniaturas de pantalla) ·
-marked (MD→HTML) · @fontsource Fira Code / Outfit / Instrument Serif (offline).
+pdf-lib (vector engine) · pdfjs-dist (on-screen thumbnails only) ·
+marked (MD→HTML) · 12 embedded @fontsource typefaces — serif (Charter*, Instrument
+Serif, Lora, Merriweather, IBM Plex Serif, Georgia*), sans (Outfit, Space Grotesk,
+Inter, Helvetica*), mono (Fira Code, IBM Plex Mono) — all offline, embedded as real
+vector glyphs in the PDF. (*system fonts)
 
-## Estructura
+## Structure
 
 ```
-src/main/       ventana, IPC, htmlToPdf (printToPDF vectorial)
-src/preload/    puente contextBridge (window.station)
-src/renderer/   UI React — components/ engine/ state/
-src/shared/     tipos del modelo + base64
+src/main/       window, IPC, htmlToPdf (vector printToPDF)
+src/preload/    contextBridge bridge (window.station)
+src/renderer/   React UI — components/ engine/ state/
+src/shared/     data model types + base64
 ```
+
+## License
+
+[MIT](LICENSE) — the code is free to use. The **sanblueᵈᵒᵗ** name, wordmark and brand
+identity are not covered by the license.
 
 ---
-© Sandy E. Quintero — sanblueᵈᵒᵗ · retro dev-station
+© 2026 Sandy E. Quintero — sanblueᵈᵒᵗ · retro dev-station
