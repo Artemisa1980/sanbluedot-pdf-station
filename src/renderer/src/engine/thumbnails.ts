@@ -44,9 +44,12 @@ export function renderPageDataUrl(
   srcId: string,
   bytes: Uint8Array,
   pageIndex: number,
-  targetWidth = 180
+  targetWidth = 180,
+  /** true → canvas con alpha (sin papel blanco): el color de fondo se monta DEBAJO,
+      idéntico a la capa vectorial de la exportación. */
+  transparent = false
 ): Promise<string> {
-  const key = `${srcId}:${pageIndex}:${targetWidth}`;
+  const key = `${srcId}:${pageIndex}:${targetWidth}:${transparent ? "t" : "o"}`;
   let t = thumbs.get(key);
   if (!t) {
     t = (async () => {
@@ -60,7 +63,11 @@ export function renderPageDataUrl(
       canvas.height = Math.ceil(viewport.height);
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("No se pudo crear el canvas de miniatura");
-      await page.render({ canvasContext: ctx, viewport }).promise;
+      await page.render({
+        canvasContext: ctx,
+        viewport,
+        ...(transparent ? { background: "rgba(0,0,0,0)" } : {})
+      }).promise;
       return canvas.toDataURL("image/png");
     })();
     thumbs.set(key, t);

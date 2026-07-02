@@ -27,6 +27,11 @@
   --radius: 8px;
   --radius-sm: 5px;
   --scrollbar: rgba(45, 53, 48, 0.25);
+  /* Retro dev-station: bordes marcados + sombra dura (referencias de Sandy 2026-07-02) */
+  --border-strong: #39423c;
+  --shadow-ink: rgba(45, 53, 48, 0.32);
+  --retro-sm: 2px 2px 0 var(--shadow-ink);
+  --retro-md: 3px 3px 0 var(--shadow-ink);
 
   /* Fuentes de marca */
   --mono: "Fira Code", Menlo, Consolas, monospace;
@@ -49,6 +54,8 @@
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.25);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.35);
   --scrollbar: rgba(124, 179, 232, 0.3);
+  --border-strong: rgba(124, 179, 232, 0.45);
+  --shadow-ink: rgba(0, 0, 0, 0.55);
 }
 
 body {
@@ -85,15 +92,88 @@ body {
   color: var(--text-label);
 }
 
+/* Botón retro dev-station: borde marcado + sombra dura que se "hunde" al click */
 .btn-ghost {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--text-label);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 4px 10px;
-  background: transparent;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 7px;
+  padding: 4px 11px;
+  background: var(--panel-bg);
   cursor: pointer;
-  transition: border-color 0.2s, color 0.2s;
+  box-shadow: var(--retro-sm);
+  transition: border-color 0.15s, color 0.15s, box-shadow 0.15s, transform 0.15s, background-color 0.15s;
 }
-.btn-ghost:hover { border-color: var(--accent); color: var(--text); }
+.btn-ghost:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 var(--shadow-ink);
+}
+.btn-ghost:active:not(:disabled) {
+  transform: translate(1px, 1px);
+  box-shadow: 0 0 0 var(--shadow-ink);
+}
+.btn-ghost:disabled { opacity: 0.45; cursor: default; box-shadow: none; }
+
+/* Tarjeta retro: contenedor con borde fuerte y sombra dura (paneles, secciones, modales) */
+.card-retro {
+  border: 1.5px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--panel-bg);
+  box-shadow: var(--retro-md);
+}
+
+/* Chips de tipo de fuente — MD azul dot / HTML gold / PDF coral */
+.chip {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--border-strong);
+  letter-spacing: 0.4px;
+}
+.chip-md { background: rgba(124, 179, 232, 0.25); color: #2b5fa8; }
+.chip-html { background: rgba(239, 193, 94, 0.3); color: #8a6210; }
+.chip-pdf { background: rgba(224, 122, 111, 0.25); color: #a33f33; }
+.dark .chip-md { color: #a8cdf0; }
+.dark .chip-html { color: #f0d492; }
+.dark .chip-pdf { color: #eda99f; }
+
+/* Dropzone: arrastra o haz clic para subir */
+.dropzone {
+  border: 2px dashed var(--border-strong);
+  border-radius: 10px;
+  background: var(--input-bg);
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.dropzone:hover, .dropzone.drag-over {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* Barra flotante de la vista lectura (zoom + navegación) */
+.float-bar {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 6px;
+  z-index: 30;
+  backdrop-filter: blur(6px);
+}
+.float-bar .btn-ghost { padding: 3px 8px; min-width: 30px; }
+
+/* El documento como hoja: página con sombra sobre el fondo del workspace */
+.sheet {
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.16), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  border-radius: 2px;
+}

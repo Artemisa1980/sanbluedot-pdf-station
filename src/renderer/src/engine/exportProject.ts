@@ -1,5 +1,6 @@
 import { PDFDocument, PDFFont, StandardFonts, degrees, rgb } from "pdf-lib";
 import { b64ToBytes } from "../../../shared/b64";
+import { effectiveBackground } from "./sources";
 import type { PageRef, StationProject } from "../../../shared/types";
 
 /**
@@ -42,7 +43,11 @@ export async function exportProject(project: StationProject): Promise<Uint8Array
       srcDocs.set(ref.srcId, src);
     }
 
-    if (!ref.background && ref.patches.length === 0) {
+    // Fondo efectivo: manual o el papel de color del doc (pinta la hoja completa,
+    // márgenes incluidos — printToPDF los deja blancos, verificado 2026-07-02)
+    const background = effectiveBackground(project, ref);
+
+    if (!background && ref.patches.length === 0) {
       // Camino directo: transfusión pura
       const [copied] = await out.copyPages(src, [ref.pageIndex]);
       if (ref.rotation) {
@@ -57,8 +62,8 @@ export async function exportProject(project: StationProject): Promise<Uint8Array
     const { width, height } = embedded;
     const page = out.addPage([width, height]);
 
-    if (ref.background) {
-      page.drawRectangle({ x: 0, y: 0, width, height, color: hexToRgb(ref.background) });
+    if (background) {
+      page.drawRectangle({ x: 0, y: 0, width, height, color: hexToRgb(background) });
     }
 
     page.drawPage(embedded);

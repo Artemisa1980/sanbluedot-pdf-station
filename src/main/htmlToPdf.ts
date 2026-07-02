@@ -13,6 +13,8 @@ export interface HtmlToPdfOptions {
   pageSize: "letter" | "a4";
   margins: "compact" | "apa";
   pageNumbers: boolean;
+  /** Color del número de página — claro sobre papeles oscuros (default gris) */
+  footerColor?: string;
 }
 
 /**
@@ -33,8 +35,7 @@ export async function htmlToPdf(html: string, opts: HtmlToPdfOptions): Promise<B
       margins: MARGINS[opts.margins],
       displayHeaderFooter: opts.pageNumbers,
       headerTemplate: "<div></div>",
-      footerTemplate:
-        '<div style="width:100%;text-align:right;font-size:8px;padding-right:12mm;color:#5b6472;font-family:monospace;"><span class="pageNumber"></span></div>'
+      footerTemplate: `<div style="width:100%;text-align:right;font-size:8px;padding-right:12mm;color:${opts.footerColor || "#5b6472"};font-family:monospace;"><span class="pageNumber"></span></div>`
     });
   } finally {
     win.destroy();

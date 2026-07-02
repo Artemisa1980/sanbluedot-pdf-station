@@ -1,6 +1,6 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, dialog } from "electron";
 import path from "path";
-import { registerIpc } from "./ipc";
+import { appState, registerIpc } from "./ipc";
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -12,6 +12,21 @@ function createWindow(): void {
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js")
     }
+  });
+
+  // Protección de trabajo: cerrar con cambios sin guardar pide confirmación
+  win.on("close", (e) => {
+    if (!appState.dirty) return;
+    const choice = dialog.showMessageBoxSync(win, {
+      type: "warning",
+      buttons: ["Cancelar", "Cerrar sin guardar"],
+      defaultId: 0,
+      cancelId: 0,
+      title: "Cambios sin guardar",
+      message: "Hay cambios sin guardar en el proyecto.",
+      detail: "Si cierras ahora se perderán. Guarda con Cmd+S antes de salir."
+    });
+    if (choice === 0) e.preventDefault();
   });
 
   if (process.env.ELECTRON_RENDERER_URL) {

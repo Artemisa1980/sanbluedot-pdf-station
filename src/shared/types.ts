@@ -25,12 +25,25 @@ export interface PageRef {
   patches: Patch[];
 }
 
+/** Estética granular de un documento propio — CSS puro inyectado al compilar (siempre vectorial). */
+export interface DocStyle {
+  fontId: string; // id de FONT_CHOICES (engine/fonts.ts)
+  fontSizePt: number;
+  lineHeight: number;
+  bgColor: string; // "#ffffff" = hoja transparente (deja pasar el fondo por página del organizador)
+  textColor: string;
+  thBg: string; // encabezado de tabla
+  thText: string;
+}
+
 export interface SourceDoc {
   id: string;
   name: string;
   kind: "md" | "html";
   content: string;
   preset: string;
+  /** Ausente en proyectos v1.0 viejos → se resuelve con la base del preset (misma apariencia de siempre) */
+  style?: DocStyle;
   // La firma sanblueᵈᵒᵗ viaja DENTRO del contenido del documento (masthead/footer en el md/html)
   compiledB64: string | null; // PDF compilado — se persiste para restaurar sin recompilar
 }

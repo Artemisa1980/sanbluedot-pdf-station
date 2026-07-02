@@ -1,38 +1,51 @@
 import { dialog, ipcMain } from "electron";
 import { readFile, writeFile } from "fs/promises";
 import path from "path";
+import { pathToFileURL } from "url";
 import { htmlToPdf, type HtmlToPdfOptions } from "./htmlToPdf";
 
+/** Estado compartido con la ventana: ¿hay cambios sin guardar? (alimenta el aviso al cerrar) */
+export const appState = { dirty: false };
+
 export function registerIpc(): void {
-  ipcMain.handle("station:importPdfDialog", async () => {
+  ipcMain.on("station:setDirty", (_e, value: boolean) => {
+    appState.dirty = Boolean(value);
+  });
+
+  // Un solo diálogo para todo lo importable: PDFs y documentos MD/HTML
+  ipcMain.handle("station:importFilesDialog", async () => {
     const res = await dialog.showOpenDialog({
-      title: "Importar PDF",
-      filters: [{ name: "PDF", extensions: ["pdf"] }],
+      title: "Agregar a la estación",
+      filters: [
+        { name: "PDF / Markdown / HTML", extensions: ["pdf", "md", "markdown", "html", "htm"] },
+        { name: "Todos los archivos", extensions: ["*"] }
+      ],
       properties: ["openFile", "multiSelections"]
     });
     if (res.canceled) return [];
     return Promise.all(
-      res.filePaths.map(async (fp) => ({
-        name: path.basename(fp),
-        bytesB64: (await readFile(fp)).toString("base64")
-      }))
+      res.filePaths.map(async (fp) => {
+        const name = path.basename(fp);
+        if (/\.pdf$/i.test(fp)) {
+          return { name, kind: "pdf" as const, bytesB64: (await readFile(fp)).toString("base64") };
+        }
+        const kind = /\.(html?|htm)$/i.test(fp) ? ("html" as const) : ("md" as const);
+        return { name, kind, content: await readFile(fp, "utf-8") };
+      })
     );
   });
 
-  ipcMain.handle("station:importDocsDialog", async () => {
+  // Elegir imágenes → URLs file:// canónicas (pathToFileURL codifica espacios, unicode, #…)
+  // listas para incrustar. Las rutas relativas NO sobreviven la compilación: el HTML se
+  // imprime desde un archivo temporal, así que la ruta absoluta es la única segura.
+  ipcMain.handle("station:pickImagesDialog", async () => {
     const res = await dialog.showOpenDialog({
-      title: "Abrir Markdown / HTML",
-      filters: [{ name: "Markdown / HTML", extensions: ["md", "markdown", "html", "htm"] }],
+      title: "Insertar imágenes",
+      filters: [{ name: "Imágenes", extensions: ["png", "jpg", "jpeg", "webp", "gif", "svg"] }],
       properties: ["openFile", "multiSelections"]
     });
     if (res.canceled) return [];
-    return Promise.all(
-      res.filePaths.map(async (fp) => ({
-        name: path.basename(fp),
-        kind: /\.(html?|htm)$/i.test(fp) ? "html" : "md",
-        content: await readFile(fp, "utf-8")
-      }))
-    );
+    return res.filePaths.map((fp) => ({ name: path.basename(fp), url: pathToFileURL(fp).href }));
   });
 
   ipcMain.handle("station:exportPdfDialog", async (_e, defaultName: string, bytesB64: string) => {

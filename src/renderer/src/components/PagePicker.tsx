@@ -44,8 +44,8 @@ export function PagePicker({ name, srcId, bytes, onConfirm, onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="flex max-h-full w-[860px] flex-col overflow-hidden"
-        style={{ background: "var(--panel-bg)", borderRadius: "var(--radius)", boxShadow: "var(--shadow-lg)" }}
+        className="card-retro flex max-h-full w-[860px] flex-col overflow-hidden"
+        style={{ boxShadow: "5px 5px 0 var(--shadow-ink)" }}
         onClick={(e) => e.stopPropagation()}
       >
         <header

@@ -29,11 +29,13 @@ export function emptyProject(): StationProject {
 export type Action =
   | { type: "newProject" }
   | { type: "loadProject"; project: StationProject }
+  | { type: "markSaved" }
   | { type: "addPdf"; pdf: ImportedPdf; pageRefs: PageRef[] }
   | { type: "addDoc"; doc: SourceDoc }
   | { type: "updateDoc"; docId: string; patch: Partial<SourceDoc> }
   | { type: "setDocPages"; docId: string; compiledB64: string; pageCount: number }
   | { type: "removeSource"; srcId: string }
+  | { type: "moveSource"; srcId: string; dir: -1 | 1 }
   | { type: "insertPages"; pageRefs: PageRef[]; atIndex: number }
   | { type: "removePages"; ids: string[] }
   | { type: "duplicatePages"; ids: string[] }
@@ -52,6 +54,7 @@ export type Action =
 export interface StationState {
   project: StationProject;
   selection: string[]; // ids de PageRef seleccionadas, en orden de selección
+  dirty: boolean; // hay cambios sin guardar — alimenta el aviso de cierre y las confirmaciones
 }
 
 function rotateBy(r: Rotation, delta: 90 | -90): Rotation {
@@ -62,6 +65,7 @@ function mapPages(state: StationState, ids: string[], fn: (p: PageRef) => PageRe
   const wanted = new Set(ids);
   return {
     ...state,
+    dirty: true,
     project: {
       ...state.project,
       pages: state.project.pages.map((p) => (wanted.has(p.id) ? fn(p) : p))
@@ -74,14 +78,18 @@ function reducer(state: StationState, action: Action): StationState {
 
   switch (action.type) {
     case "newProject":
-      return { project: emptyProject(), selection: [] };
+      return { project: emptyProject(), selection: [], dirty: false };
 
     case "loadProject":
-      return { project: action.project, selection: [] };
+      return { project: action.project, selection: [], dirty: false };
+
+    case "markSaved":
+      return state.dirty ? { ...state, dirty: false } : state;
 
     case "addPdf":
       return {
         ...state,
+        dirty: true,
         project: {
           ...project,
           pdfs: [...project.pdfs, action.pdf],
@@ -90,11 +98,12 @@ function reducer(state: StationState, action: Action): StationState {
       };
 
     case "addDoc":
-      return { ...state, project: { ...project, docs: [...project.docs, action.doc] } };
+      return { ...state, dirty: true, project: { ...project, docs: [...project.docs, action.doc] } };
 
     case "updateDoc":
       return {
         ...state,
+        dirty: true,
         project: {
           ...project,
           docs: project.docs.map((d) => (d.id === action.docId ? { ...d, ...action.patch } : d))
@@ -102,22 +111,37 @@ function reducer(state: StationState, action: Action): StationState {
       };
 
     case "setDocPages": {
-      // Reemplaza las páginas del doc conservando la posición de la primera aparición
+      // Reemplaza las páginas del doc conservando la posición de la primera aparición.
+      // Reutiliza las refs viejas índice a índice: recompilar (manual o automático) no
+      // pierde id (la selección sigue viva), rotación, fondo ni parches de esas hojas.
       const oldIndex = project.pages.findIndex((p) => p.srcId === action.docId);
       const rest = project.pages.filter((p) => p.srcId !== action.docId);
-      const fresh: PageRef[] = Array.from({ length: action.pageCount }, (_, i) => ({
-        id: newId(),
-        srcId: action.docId,
-        srcKind: "doc",
-        pageIndex: i,
-        rotation: 0,
-        background: null,
-        patches: []
-      }));
+      const byIndex = new Map<number, PageRef[]>();
+      for (const p of project.pages) {
+        if (p.srcId !== action.docId) continue;
+        const arr = byIndex.get(p.pageIndex) ?? [];
+        arr.push(p);
+        byIndex.set(p.pageIndex, arr);
+      }
+      const fresh: PageRef[] = Array.from(
+        { length: action.pageCount },
+        (_, i) =>
+          byIndex.get(i)?.shift() ?? {
+            id: newId(),
+            srcId: action.docId,
+            srcKind: "doc",
+            pageIndex: i,
+            rotation: 0,
+            background: null,
+            patches: []
+          }
+      );
       const at = oldIndex === -1 ? rest.length : Math.min(oldIndex, rest.length);
       const pages = [...rest.slice(0, at), ...fresh, ...rest.slice(at)];
+      const keep = new Set(pages.map((p) => p.id));
       return {
-        selection: [],
+        selection: state.selection.filter((id) => keep.has(id)),
+        dirty: true,
         project: {
           ...project,
           docs: project.docs.map((d) =>
@@ -133,6 +157,7 @@ function reducer(state: StationState, action: Action): StationState {
       const keep = new Set(pages.map((p) => p.id));
       return {
         selection: state.selection.filter((id) => keep.has(id)),
+        dirty: true,
         project: {
           ...project,
           docs: project.docs.filter((d) => d.id !== action.srcId),
@@ -142,16 +167,30 @@ function reducer(state: StationState, action: Action): StationState {
       };
     }
 
+    case "moveSource": {
+      // Mueve la fuente completa (todas sus páginas, como capítulo) en el orden del maestro.
+      // Orden de fuentes = primera aparición; al mover se consolidan sus páginas en bloque.
+      const order: string[] = [];
+      for (const p of project.pages) if (!order.includes(p.srcId)) order.push(p.srcId);
+      const idx = order.indexOf(action.srcId);
+      const to = idx + action.dir;
+      if (idx === -1 || to < 0 || to >= order.length) return state;
+      [order[idx], order[to]] = [order[to], order[idx]];
+      const pages = order.flatMap((srcId) => project.pages.filter((p) => p.srcId === srcId));
+      return { ...state, dirty: true, project: { ...project, pages } };
+    }
+
     case "insertPages": {
       const at = Math.max(0, Math.min(action.atIndex, project.pages.length));
       const pages = [...project.pages.slice(0, at), ...action.pageRefs, ...project.pages.slice(at)];
-      return { ...state, project: { ...project, pages } };
+      return { ...state, dirty: true, project: { ...project, pages } };
     }
 
     case "removePages": {
       const gone = new Set(action.ids);
       return {
         selection: state.selection.filter((id) => !gone.has(id)),
+        dirty: true,
         project: { ...project, pages: project.pages.filter((p) => !gone.has(p.id)) }
       };
     }
@@ -172,7 +211,7 @@ function reducer(state: StationState, action: Action): StationState {
           pages.push(copy);
         }
       }
-      return { selection: newIds, project: { ...project, pages } };
+      return { selection: newIds, dirty: true, project: { ...project, pages } };
     }
 
     case "movePages": {
@@ -187,7 +226,7 @@ function reducer(state: StationState, action: Action): StationState {
         if (!wanted.has(project.pages[i].id)) at++;
       }
       const pages = [...rest.slice(0, at), ...moving, ...rest.slice(at)];
-      return { ...state, project: { ...project, pages } };
+      return { ...state, dirty: true, project: { ...project, pages } };
     }
 
     case "rotatePages":
@@ -212,13 +251,13 @@ function reducer(state: StationState, action: Action): StationState {
       }));
 
     case "setPageSize":
-      return { ...state, project: { ...project, pageSize: action.value } };
+      return { ...state, dirty: true, project: { ...project, pageSize: action.value } };
 
     case "setMargins":
-      return { ...state, project: { ...project, margins: action.value } };
+      return { ...state, dirty: true, project: { ...project, margins: action.value } };
 
     case "setName":
-      return { ...state, project: { ...project, name: action.value } };
+      return { ...state, dirty: true, project: { ...project, name: action.value } };
 
     case "select":
       return { ...state, selection: action.ids };
@@ -238,7 +277,8 @@ const StationContext = createContext<{ state: StationState; dispatch: Dispatch<A
 export function StationProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, () => ({
     project: emptyProject(),
-    selection: [] as string[]
+    selection: [] as string[],
+    dirty: false
   }));
   return <StationContext.Provider value={{ state, dispatch }}>{children}</StationContext.Provider>;
 }
@@ -246,5 +286,10 @@ export function StationProvider({ children }: { children: ReactNode }) {
 export function useStation() {
   const ctx = useContext(StationContext);
   if (!ctx) throw new Error("useStation debe usarse dentro de <StationProvider>");
-  return { project: ctx.state.project, selection: ctx.state.selection, dispatch: ctx.dispatch };
+  return {
+    project: ctx.state.project,
+    selection: ctx.state.selection,
+    dirty: ctx.state.dirty,
+    dispatch: ctx.dispatch
+  };
 }

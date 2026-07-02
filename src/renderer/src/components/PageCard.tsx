@@ -35,9 +35,9 @@ export function PageCard({
     <div
       className="relative cursor-pointer rounded-lg border-2 p-1.5 transition-colors"
       style={{
-        borderColor: selected ? "var(--accent)" : "var(--border)",
+        borderColor: selected ? "var(--accent)" : "var(--border-strong)",
         background: selected ? "var(--accent-soft)" : "var(--panel-bg)",
-        boxShadow: "var(--shadow-sm)"
+        boxShadow: selected ? "3px 3px 0 rgba(124, 179, 232, 0.45)" : "var(--retro-sm)"
       }}
       draggable
       onClick={onSelect}

@@ -82,8 +82,8 @@ export function PatchEditor({ page, bytes, initial, onSave, onDelete, onClose }:
       onClick={onClose}
     >
       <div
-        className="flex max-h-full gap-0 overflow-hidden"
-        style={{ background: "var(--panel-bg)", borderRadius: "var(--radius)", boxShadow: "var(--shadow-lg)" }}
+        className="card-retro flex max-h-full gap-0 overflow-hidden"
+        style={{ boxShadow: "5px 5px 0 var(--shadow-ink)" }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Página + dibujo */}

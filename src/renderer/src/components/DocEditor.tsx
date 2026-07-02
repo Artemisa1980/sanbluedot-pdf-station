@@ -1,40 +1,110 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useStation } from "../state/store";
-import { buildDocHtml, compileDoc } from "../engine/compile";
-import { PRESETS } from "../engine/presets";
+import { compileDoc, compileDocRaw } from "../engine/compile";
+import { exportProject } from "../engine/exportProject";
+import { resolveStyle } from "../engine/presets";
+import { evictBytes } from "../engine/bytesCache";
+import { evictSource, getPageCount, renderPageDataUrl } from "../engine/thumbnails";
+import { b64ToBytes, bytesToB64 } from "../../../shared/b64";
+import type { PageRef, StationProject } from "../../../shared/types";
+
+export type EditorView = "editor" | "ambos" | "preview";
 
 interface Props {
   docId: string;
+  view: EditorView;
+  onViewChange: (v: EditorView) => void;
   onClose: () => void;
 }
 
-/** Editor de contenido propio: fuente a la izquierda, preview compilada en vivo a la derecha. */
-export function DocEditor({ docId, onClose }: Props) {
+/**
+ * Editor de contenido propio. La maqueta ES el PDF real: se compila sola tras una
+ * pausa de tecleo y se muestra como hojas separadas — cortes de página, numeración
+ * y colores idénticos al PDF final. El texto se sincroniza solo al proyecto (debounce).
+ */
+export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
   const { project, dispatch } = useStation();
   const doc = project.docs.find((d) => d.id === docId);
 
   const [content, setContent] = useState(doc?.content ?? "");
-  const [previewHtml, setPreviewHtml] = useState("");
+  const [previewB64, setPreviewB64] = useState<string | null>(doc?.compiledB64 ?? null);
+  const [building, setBuilding] = useState(false);
   const [compiling, setCompiling] = useState(false);
+  const [exportingDoc, setExportingDoc] = useState(false);
+  const [exportFlash, setExportFlash] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"editor" | "ambos" | "preview">("ambos");
+  const [savedFlash, setSavedFlash] = useState(false);
+  const contentRef = useRef(content);
+  contentRef.current = content;
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  // Lo último que el proyecto conoce — evita despachos (y dirty) fantasma sin cambios reales
+  const storedRef = useRef(doc?.content ?? "");
+  storedRef.current = doc?.content ?? storedRef.current;
+  const buildToken = useRef(0);
 
-  // Preview en vivo con debounce de 300ms
+  const previewSrcId = `preview:${docId}`;
+  const style = doc ? resolveStyle(doc) : null;
+
+  // Maqueta viva: compilar el PDF real tras 1s de pausa (contenido, estilo o página del proyecto)
   useEffect(() => {
     if (!doc) return;
-    const t = setTimeout(() => setPreviewHtml(buildDocHtml({ ...doc, content })), 300);
+    const token = ++buildToken.current;
+    const t = setTimeout(
+      async () => {
+        setBuilding(true);
+        try {
+          const b64 = await compileDocRaw({ ...doc, content }, project);
+          if (buildToken.current !== token) return; // llegó tarde — hay una compilación más nueva
+          evictSource(previewSrcId);
+          evictBytes(previewSrcId);
+          setPreviewB64(b64);
+          setError(null);
+        } catch (e) {
+          if (buildToken.current === token) {
+            setError(e instanceof Error ? e.message : "Error al maquetar.");
+          }
+        } finally {
+          if (buildToken.current === token) setBuilding(false);
+        }
+      },
+      previewB64 ? 1000 : 150 // primera maqueta casi inmediata; luego, pausa de tecleo
+    );
     return () => clearTimeout(t);
-  }, [doc, content]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc?.preset, doc?.style, content, project.pageSize, project.margins]);
+
+  // Protección de trabajo: el texto viaja al proyecto con debounce — nada vive solo en el editor
+  useEffect(() => {
+    if (!doc || content === doc.content) return;
+    const t = setTimeout(() => dispatch({ type: "updateDoc", docId, patch: { content } }), 400);
+    return () => clearTimeout(t);
+  }, [content, doc, docId, dispatch]);
+
+  // Flush + limpieza de la maqueta efímera al desmontar
+  useEffect(() => {
+    return () => {
+      if (contentRef.current !== storedRef.current) {
+        dispatch({ type: "updateDoc", docId, patch: { content: contentRef.current } });
+      }
+      evictSource(`preview:${docId}`);
+      evictBytes(`preview:${docId}`);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docId]);
 
   if (!doc) return null;
 
   function saveContent() {
-    dispatch({ type: "updateDoc", docId, patch: { content } });
+    if (doc && content !== doc.content) {
+      dispatch({ type: "updateDoc", docId, patch: { content } });
+    }
+    setSavedFlash(true);
+    setTimeout(() => setSavedFlash(false), 1500);
   }
 
   async function handleCompile() {
     if (!doc) return;
-    saveContent();
+    dispatch({ type: "updateDoc", docId, patch: { content } });
     setCompiling(true);
     setError(null);
     try {
@@ -48,30 +118,110 @@ export function DocEditor({ docId, onClose }: Props) {
     }
   }
 
+  /** Insertar imágenes como <img> con URL file:// canónica (las relativas se rompen al compilar). */
+  async function handleInsertImages() {
+    const imgs = await window.station.pickImagesDialog();
+    if (imgs.length === 0) return;
+    const snippet = imgs
+      .map(
+        (im) =>
+          `<img src="${im.url}" alt="${im.name.replace(/\.[^.]+$/, "").replace(/"/g, "")}" style="width:100%;border-radius:6px;" />`
+      )
+      .join("\n\n");
+    const ta = textareaRef.current;
+    setContent((prev) => {
+      if (!ta) return prev ? `${prev.replace(/\n*$/, "")}\n\n${snippet}\n` : `${snippet}\n`;
+      const start = ta.selectionStart ?? prev.length;
+      const end = ta.selectionEnd ?? start;
+      const before = prev.slice(0, start);
+      const after = prev.slice(end);
+      const pad = before && !before.endsWith("\n\n") ? (before.endsWith("\n") ? "\n" : "\n\n") : "";
+      return `${before}${pad}${snippet}\n\n${after}`;
+    });
+    ta?.focus();
+  }
+
+  /** Convertir SOLO este documento a PDF — no toca el proyecto (caso "md → pdf y ya"). */
+  async function handleExportDoc() {
+    if (!doc) return;
+    setExportingDoc(true);
+    setError(null);
+    try {
+      const current = { ...doc, content };
+      const { compiledB64, pageCount } = await compileDoc(current, project);
+      const pages: PageRef[] = Array.from({ length: pageCount }, (_, i) => ({
+        id: `doc-export:${docId}:${i}`,
+        srcId: docId,
+        srcKind: "doc",
+        pageIndex: i,
+        rotation: 0,
+        background: null,
+        patches: []
+      }));
+      // Mismo motor que EXPORTAR: papel de color de borde a borde, todo vectorial
+      const single: StationProject = {
+        ...project,
+        docs: [{ ...current, compiledB64 }],
+        pdfs: [],
+        pages
+      };
+      const bytes = await exportProject(single);
+      const base = doc.name.replace(/\.(md|markdown|html?|htm)$/i, "");
+      const saved = await window.station.exportPdfDialog(`${base || "documento"}.pdf`, bytesToB64(bytes));
+      if (saved) {
+        setExportFlash(true);
+        setTimeout(() => setExportFlash(false), 1500);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al exportar el documento.");
+    } finally {
+      setExportingDoc(false);
+    }
+  }
+
+  const editorArea = (framed: boolean) => (
+    <textarea
+      ref={textareaRef}
+      className={`h-full w-full resize-none text-[13px] leading-relaxed outline-none ${framed ? "px-7 py-6" : "p-6"}`}
+      style={{
+        fontFamily: "var(--mono)",
+        background: framed ? "transparent" : "var(--panel-bg)",
+        color: "var(--text)"
+      }}
+      value={content}
+      onChange={(e) => setContent(e.target.value)}
+      spellCheck={false}
+      placeholder={doc.kind === "md" ? "# Escribe tu Markdown aquí…" : "<h1>Escribe tu HTML aquí…</h1>"}
+    />
+  );
+
+  const sheets = (
+    <PreviewSheets
+      srcId={previewSrcId}
+      b64={previewB64}
+      paperColor={style && style.bgColor.toLowerCase() !== "#ffffff" ? style.bgColor : null}
+      pageRatio={project.pageSize === "a4" ? "210 / 297" : "17 / 22"}
+    />
+  );
+
   return (
     <section className="flex min-w-0 flex-1 flex-col">
       {/* Barra del editor — flex-wrap: en ventanas angostas los controles bajan de línea sin romperse */}
       <div
-        className="flex min-h-[44px] shrink-0 flex-wrap items-center gap-2 border-b px-4 py-1.5"
+        className="flex min-h-[46px] shrink-0 flex-wrap items-center gap-2 border-b px-3 py-1.5"
         style={{ background: "var(--panel-header)", borderColor: "var(--border)" }}
       >
-        <button
-          className="btn-ghost"
-          onClick={() => {
-            saveContent();
-            onClose();
-          }}
-        >
+        <button className="btn-ghost" onClick={onClose}>
           ‹ Volver
         </button>
 
-        {/* Modo de vista: solo editor / ambos / solo preview (patrón del workspace original) */}
+        {/* Modo de vista: solo editor / ambos / solo maqueta */}
         <div className="flex gap-0.5">
           {(
             [
               ["editor", "✎", "Solo editor"],
-              ["ambos", "◫", "Ambos"],
-              ["preview", "▤", "Solo preview"]
+              ["ambos", "◫", "Ambos (maqueta + fuente)"],
+              ["preview", "▤", "Solo documento"]
             ] as const
           ).map(([mode, icon, title]) => (
             <button
@@ -79,7 +229,7 @@ export function DocEditor({ docId, onClose }: Props) {
               className="btn-ghost"
               style={view === mode ? { borderColor: "var(--accent)", background: "var(--accent-soft)" } : undefined}
               title={title}
-              onClick={() => setView(mode)}
+              onClick={() => onViewChange(mode)}
             >
               {icon}
             </button>
@@ -93,25 +243,36 @@ export function DocEditor({ docId, onClose }: Props) {
           onChange={(e) => dispatch({ type: "updateDoc", docId, patch: { name: e.target.value } })}
         />
 
-        <select
-          className="btn-ghost"
-          style={{ background: "var(--input-bg)" }}
-          value={doc.preset}
-          onChange={(e) => dispatch({ type: "updateDoc", docId, patch: { preset: e.target.value } })}
-          title="Preset estético"
-        >
-          {PRESETS.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.label}
-            </option>
-          ))}
-        </select>
+        {building && (
+          <span className="text-[10px]" style={{ fontFamily: "var(--mono)", color: "var(--text-muted)" }}>
+            ◌ maquetando…
+          </span>
+        )}
 
         <button
           className="btn-ghost whitespace-nowrap"
-          style={{ borderColor: "var(--accent)", background: "var(--accent-soft)" }}
+          onClick={handleInsertImages}
+          title="Insertar imágenes de tu compu — la ruta file:// segura se genera sola"
+        >
+          ＋ Imagen
+        </button>
+
+        <button
+          className="btn-ghost whitespace-nowrap"
+          style={exportFlash ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}
+          disabled={exportingDoc}
+          onClick={handleExportDoc}
+          title="Convertir SOLO este documento a PDF (no toca el proyecto)"
+        >
+          {exportingDoc ? "Exportando…" : exportFlash ? "✓ PDF" : "⬇ PDF"}
+        </button>
+
+        <button
+          className="btn-ghost whitespace-nowrap"
+          style={{ borderColor: "var(--accent)", background: "var(--accent-soft)", fontWeight: 700 }}
           disabled={compiling}
           onClick={handleCompile}
+          title="Compilar al documento maestro (PDF vectorial)"
         >
           {compiling ? "Compilando…" : "⚡ Compilar"}
         </button>
@@ -126,35 +287,192 @@ export function DocEditor({ docId, onClose }: Props) {
         </div>
       )}
 
-      {/* Editor + preview según el modo de vista */}
-      <div className="flex min-h-0 flex-1">
-        {view !== "preview" && (
-          <textarea
-            className={`h-full resize-none p-4 text-[13px] leading-relaxed outline-none ${
-              view === "editor" ? "w-full" : "w-1/2 border-r"
-            }`}
-            style={{
-              fontFamily: "var(--mono)",
-              background: "var(--panel-bg)",
-              color: "var(--text)",
-              borderColor: "var(--border)"
-            }}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            spellCheck={false}
-            placeholder={doc.kind === "md" ? "# Escribe tu Markdown aquí…" : "<h1>Escribe tu HTML aquí…</h1>"}
-          />
-        )}
-        {view !== "editor" && (
-          <iframe
-            className={`h-full ${view === "preview" ? "w-full" : "w-1/2"}`}
-            style={{ background: "#ffffff", border: "none" }}
-            title="Previsualización compilada"
-            sandbox=""
-            srcDoc={previewHtml}
-          />
-        )}
-      </div>
+      {/* Contenido según el modo de vista */}
+      {view === "ambos" ? (
+        /* Dos tarjetas independientes, cada una con su propio scroll */
+        <div className="flex min-h-0 flex-1 gap-3 p-3" style={{ background: "var(--app-bg)" }}>
+          <div className="card-retro flex min-w-0 flex-1 flex-col overflow-hidden">
+            <div
+              className="flex h-[38px] shrink-0 items-center justify-between border-b px-3"
+              style={{ borderColor: "var(--border)", background: "var(--panel-header)" }}
+            >
+              <span className="section-label">▤ Maqueta — PDF real</span>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto" style={{ background: "var(--panel-header)" }}>
+              {sheets}
+            </div>
+          </div>
+
+          <div className="card-retro flex min-w-0 flex-1 flex-col overflow-hidden">
+            <div
+              className="flex h-[38px] shrink-0 items-center justify-between border-b px-3"
+              style={{ borderColor: "var(--border)", background: "var(--panel-header)" }}
+            >
+              <span className="section-label truncate">✎ Fuente: {doc.name}</span>
+              <button
+                className="btn-ghost"
+                style={savedFlash ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}
+                onClick={saveContent}
+                title="Guardar el texto en el proyecto (también se guarda solo)"
+              >
+                {savedFlash ? "✓ Guardado" : "Guardar"}
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto">{editorArea(true)}</div>
+          </div>
+        </div>
+      ) : view === "editor" ? (
+        /* La fuente también es una hoja: tarjeta centrada con aire, no un textarea desnudo */
+        <div className="min-h-0 flex-1 overflow-auto p-5" style={{ background: "var(--panel-header)" }}>
+          <div className="card-retro mx-auto flex h-full w-full max-w-[900px] flex-col overflow-hidden">
+            <div
+              className="flex h-[38px] shrink-0 items-center justify-between border-b px-3"
+              style={{ borderColor: "var(--border)", background: "var(--panel-header)" }}
+            >
+              <span className="section-label truncate">✎ Fuente: {doc.name}</span>
+              <button
+                className="btn-ghost"
+                style={savedFlash ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}
+                onClick={saveContent}
+                title="Guardar el texto en el proyecto (también se guarda solo)"
+              >
+                {savedFlash ? "✓ Guardado" : "Guardar"}
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto">{editorArea(true)}</div>
+          </div>
+        </div>
+      ) : (
+        /* Vista única: el documento como hojas, sin marcos */
+        <div className="min-h-0 flex-1 overflow-auto" style={{ background: "var(--panel-header)" }}>
+          {sheets}
+        </div>
+      )}
     </section>
+  );
+}
+
+/* ---------- la maqueta: hojas del PDF compilado, con render perezoso ---------- */
+
+function PreviewSheets({
+  srcId,
+  b64,
+  paperColor,
+  pageRatio
+}: {
+  srcId: string;
+  b64: string | null;
+  paperColor: string | null;
+  pageRatio: string;
+}) {
+  const bytes = useMemo(() => (b64 ? b64ToBytes(b64) : null), [b64]);
+  const [count, setCount] = useState(0);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(680);
+
+  // Ancho de hoja = ancho disponible (se adapta al modo única/ambos y al panel)
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      setWidth(Math.max(320, Math.min(860, Math.floor(entry.contentRect.width - 56))));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    if (!bytes) {
+      setCount(0);
+      return;
+    }
+    getPageCount(srcId, bytes)
+      .then((n) => alive && setCount(n))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [srcId, bytes]);
+
+  return (
+    <div ref={boxRef} className="min-h-full px-6 py-5">
+      {!bytes ? (
+        <p className="text-center text-[12px]" style={{ fontFamily: "var(--mono)", color: "var(--text-muted)" }}>
+          ◌ maquetando el documento…
+        </p>
+      ) : (
+        <div className="mx-auto flex w-fit flex-col gap-5">
+          {Array.from({ length: count }, (_, i) => (
+            <div key={`${srcId}:${i}`}>
+              <PreviewSheet
+                srcId={srcId}
+                bytes={bytes}
+                pageIndex={i}
+                width={width}
+                paperColor={paperColor}
+                pageRatio={pageRatio}
+              />
+              <div
+                className="mt-1 text-center text-[10px]"
+                style={{ fontFamily: "var(--mono)", color: "var(--text-muted)" }}
+              >
+                {i + 1}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PreviewSheet({
+  srcId,
+  bytes,
+  pageIndex,
+  width,
+  paperColor,
+  pageRatio
+}: {
+  srcId: string;
+  bytes: Uint8Array;
+  pageIndex: number;
+  width: number;
+  paperColor: string | null;
+  pageRatio: string;
+}) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [near, setNear] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([e]) => setNear(e.isIntersecting), { rootMargin: "900px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!near) return;
+    let alive = true;
+    // Papel de color: render transparente + color debajo (idéntico a la capa de exportación)
+    renderPageDataUrl(srcId, bytes, pageIndex, width, paperColor !== null)
+      .then((u) => alive && setUrl(u))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [near, srcId, bytes, pageIndex, width, paperColor]);
+
+  return (
+    <div
+      ref={ref}
+      className="sheet overflow-hidden"
+      style={{ width, aspectRatio: pageRatio, background: paperColor ?? "#ffffff" }}
+    >
+      {url && <img src={url} alt="" draggable={false} className="h-full w-full object-contain" />}
+    </div>
   );
 }

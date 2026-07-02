@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
-import { DocEditor } from "./components/DocEditor";
-import { Inspector } from "./components/Inspector";
+import { DocEditor, type EditorView } from "./components/DocEditor";
+import { LeftPanel } from "./components/LeftPanel";
 import { Organizer } from "./components/Organizer";
-import { Sidebar } from "./components/Sidebar";
 import { exportProject } from "./engine/exportProject";
 import { deserialize, serialize } from "./engine/projectFile";
 import { evictBytes } from "./engine/bytesCache";
 import { evictSource } from "./engine/thumbnails";
 import { useStation } from "./state/store";
+import { useAutoRecompile } from "./state/useAutoRecompile";
 import { bytesToB64 } from "../../shared/b64";
 
 function useTheme() {
@@ -22,9 +22,12 @@ function useTheme() {
 export default function App() {
   const { dark, toggle } = useTheme();
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
-  const [showLeft, setShowLeft] = useState(true);
-  const [showRight, setShowRight] = useState(true);
-  const { project, dispatch } = useStation();
+  const [editorView, setEditorView] = useState<EditorView>("ambos");
+  const [readerAt, setReaderAt] = useState<string | null>(null); // abrir lectura en esta página
+  const [showPanel, setShowPanel] = useState(true);
+  const { project, dirty, dispatch } = useStation();
+  // Estilos vivos: recompila solo los docs cuyo estilo cambió, en cualquier vista
+  const recompiling = useAutoRecompile((msg) => showToast("error", msg));
   const [currentPath, setCurrentPath] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [toast, setToast] = useState<{ kind: "ok" | "error"; msg: string } | null>(null);
@@ -32,6 +35,17 @@ export default function App() {
   function showToast(kind: "ok" | "error", msg: string) {
     setToast({ kind, msg });
     setTimeout(() => setToast(null), 5000);
+  }
+
+  function openDoc(docId: string, view: EditorView = "preview") {
+    setEditorView(view);
+    setEditingDocId(docId);
+  }
+
+  // Click en un PDF de la cola: cerrar el editor si hace falta y abrir la lectura ahí
+  function openReaderAt(pageId: string) {
+    setEditingDocId(null);
+    setReaderAt(pageId);
   }
 
   // Red de seguridad: ningún error de runtime vuelve a fallar en silencio
@@ -68,10 +82,15 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  // Título de ventana = nombre del proyecto
+  // Título de ventana = nombre del proyecto (• = cambios sin guardar)
   useEffect(() => {
-    document.title = `${project.name} — sanblueᵈᵒᵗ pdf-station`;
-  }, [project.name]);
+    document.title = `${dirty ? "• " : ""}${project.name} — sanblueᵈᵒᵗ pdf-station`;
+  }, [project.name, dirty]);
+
+  // El main necesita saber si hay cambios sin guardar (aviso al cerrar la ventana)
+  useEffect(() => {
+    window.station.setDirty(dirty);
+  }, [dirty]);
 
   function clearCaches() {
     for (const p of project.pdfs) {
@@ -85,8 +104,7 @@ export default function App() {
   }
 
   function handleNew() {
-    const hasWork = project.pages.length > 0 || project.docs.length > 0 || project.pdfs.length > 0;
-    if (hasWork && !window.confirm("¿Empezar de cero? Se descartará lo que no hayas guardado.")) return;
+    if (dirty && !window.confirm("¿Empezar de cero? Se descartará lo que no hayas guardado.")) return;
     clearCaches();
     dispatch({ type: "newProject" });
     setCurrentPath(null);
@@ -102,6 +120,7 @@ export default function App() {
       );
       if (savedPath) {
         setCurrentPath(savedPath);
+        dispatch({ type: "markSaved" });
         showToast("ok", "Proyecto guardado.");
       }
     } catch (e) {
@@ -110,6 +129,8 @@ export default function App() {
   }
 
   async function handleOpenProject() {
+    // Protección de trabajo: abrir encima descarta el proyecto actual
+    if (dirty && !window.confirm("Hay cambios sin guardar. ¿Abrir otro proyecto y descartarlos?")) return;
     try {
       const res = await window.station.openProjectDialog();
       if (!res) return;
@@ -143,80 +164,85 @@ export default function App() {
   return (
     <div className="flex h-screen flex-col overflow-hidden">
       <header
-        className="flex h-[52px] shrink-0 items-center justify-between border-b px-5"
+        className="flex h-[52px] shrink-0 items-center justify-between border-b px-4"
         style={{ background: "var(--panel-bg)", borderColor: "var(--border)" }}
       >
-        <div className="flex items-baseline gap-3">
+        <div className="flex items-center gap-2.5">
           <span className="brand text-[15px]">
             sanblue<sup>dot</sup>
           </span>
-          <span className="section-label">retro pdf-station</span>
-          <div className="ml-3 flex gap-1.5">
+          {/* Un click abre, un click cierra — todo vive en el panel izquierdo */}
+          <button
+            className="btn-ghost"
+            onClick={() => setShowPanel((v) => !v)}
+            title={showPanel ? "Cerrar panel" : "Abrir panel"}
+          >
+            {showPanel ? "‹" : "›"}
+          </button>
+          <span className="section-label hidden md:inline">retro pdf-station</span>
+          <div className="ml-2 flex gap-1.5">
             <button className="btn-ghost" onClick={handleNew} title="Proyecto nuevo (empezar de cero)">
               Nuevo
             </button>
             <button className="btn-ghost" onClick={handleOpenProject} title="Abrir proyecto .sbstation (Cmd+O)">
-              Abrir proyecto
+              Abrir
             </button>
             <button className="btn-ghost" onClick={() => handleSaveProject(false)} title="Guardar proyecto (Cmd+S)">
-              Guardar
+              Guardar{dirty ? " •" : ""}
             </button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             className="btn-ghost"
             style={{ borderColor: "var(--accent)", background: "var(--accent-soft)", fontWeight: 700 }}
-            disabled={exporting || project.pages.length === 0}
+            disabled={exporting || project.pages.length === 0 || recompiling.size > 0}
             onClick={handleExport}
-            title="Fusionar todo el documento en un PDF vectorial"
+            title={
+              recompiling.size > 0
+                ? "Aplicando el estilo nuevo… un momento"
+                : "Fusionar todo el documento en un PDF vectorial"
+            }
           >
-            {exporting ? "Exportando…" : "⚡ EXPORTAR PDF"}
-          </button>
-          <button
-            className="btn-ghost"
-            style={showLeft ? { borderColor: "var(--accent)" } : undefined}
-            onClick={() => setShowLeft((v) => !v)}
-            title="Mostrar/ocultar FUENTES"
-          >
-            ◧
-          </button>
-          <button
-            className="btn-ghost"
-            style={showRight ? { borderColor: "var(--accent)" } : undefined}
-            onClick={() => setShowRight((v) => !v)}
-            title="Mostrar/ocultar ESTÉTICA"
-          >
-            ◨
+            {exporting ? "Exportando…" : recompiling.size > 0 ? "◌ Aplicando estilo…" : "⚡ EXPORTAR PDF"}
           </button>
           <button className="btn-ghost" onClick={toggle} title="Cambiar tema">
-            {dark ? "◑ oscuro" : "◐ claro"}
+            {dark ? "◑" : "◐"}
           </button>
         </div>
       </header>
 
       <main className="flex min-h-0 flex-1">
-        {showLeft && <Sidebar onOpenDoc={setEditingDocId} />}
+        {showPanel && (
+          <LeftPanel
+            editingDocId={editingDocId}
+            onOpenDoc={openDoc}
+            onOpenPdf={openReaderAt}
+            recompiling={recompiling}
+          />
+        )}
 
         {/* Guard: si el doc abierto ya no existe (eliminado / proyecto nuevo), volver al organizador */}
         {editingDocId && project.docs.some((d) => d.id === editingDocId) ? (
-          <DocEditor docId={editingDocId} onClose={() => setEditingDocId(null)} />
+          <DocEditor
+            key={editingDocId} /* remonta al cambiar de doc — el texto local no se cruza */
+            docId={editingDocId}
+            view={editorView}
+            onViewChange={setEditorView}
+            onClose={() => setEditingDocId(null)}
+          />
         ) : (
-          <Organizer />
+          <Organizer openAt={readerAt} onOpenConsumed={() => setReaderAt(null)} />
         )}
-
-        {showRight && <Inspector />}
       </main>
 
       {toast && (
         <div
-          className="fixed right-4 bottom-4 z-50 max-w-[360px] rounded-lg border px-4 py-3 text-[12px]"
+          className="card-retro fixed right-4 bottom-4 z-50 max-w-[360px] px-4 py-3 text-[12px]"
           style={{
             fontFamily: "var(--mono)",
-            background: "var(--panel-bg)",
             color: toast.kind === "error" ? "var(--danger)" : "var(--text)",
-            borderColor: toast.kind === "error" ? "var(--danger)" : "var(--accent)",
-            boxShadow: "var(--shadow-lg)"
+            borderColor: toast.kind === "error" ? "var(--danger)" : "var(--accent)"
           }}
         >
           {toast.msg}

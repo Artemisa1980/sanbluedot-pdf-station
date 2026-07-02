@@ -16,13 +16,14 @@ export function Thumbnail({ srcId, bytes, pageIndex, rotation = 0, background = 
 
   useEffect(() => {
     let alive = true;
-    renderPageDataUrl(srcId, bytes, pageIndex, width)
+    // Con fondo: render transparente y color debajo — idéntico a la capa de la exportación
+    renderPageDataUrl(srcId, bytes, pageIndex, width, background !== null)
       .then((u) => alive && setUrl(u))
       .catch(() => {});
     return () => {
       alive = false;
     };
-  }, [srcId, bytes, pageIndex, width]);
+  }, [srcId, bytes, pageIndex, width, background]);
 
   return (
     <div
@@ -38,11 +39,7 @@ export function Thumbnail({ srcId, bytes, pageIndex, rotation = 0, background = 
           src={url}
           alt={`Página ${pageIndex + 1}`}
           className="max-h-full max-w-full"
-          style={{
-            transform: rotation ? `rotate(${rotation}deg)` : undefined,
-            // multiply: el blanco del render toma el color de fondo — solo tinte de preview
-            mixBlendMode: background ? "multiply" : undefined
-          }}
+          style={{ transform: rotation ? `rotate(${rotation}deg)` : undefined }}
           draggable={false}
         />
       ) : (
