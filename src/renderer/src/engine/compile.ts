@@ -7,44 +7,25 @@ import { evictSource } from "./thumbnails";
 import { PRESETS } from "./presets";
 import type { SourceDoc, StationProject } from "../../../shared/types";
 
-/* Snippets EXACTOS de ~/Documents/Clodi-workspace/sanbluedot-signature-guide.md:
-   masthead con <table> (nunca flexbox — mata el <sup>) y footer lockup. */
-
-const MASTHEAD = `<table class="masthead" width="100%"><tr>
-<td class="brand-cell"><span class="brand">sanblue<sup class="dot">dot</sup></span></td>
-<td class="tagline-cell">retro dev-station</td>
-</tr></table>`;
-
-function footerHtml(doc: SourceDoc): string {
-  const year = new Date().getFullYear();
-  const lockup = `<div class="site-footer">
-<span class="brand">sanblue<sup class="dot">dot</sup></span> — retro dev-station
-<span class="copyright">© ${year} Sandy E. Quintero</span>
-</div>`;
-  if (doc.signature === "professional") return lockup;
-  // Académico (UTEL): línea académica ARRIBA del lockup (doble footer)
-  const line = doc.academicLine.trim();
-  const academic = line
-    ? `<p style="text-align:center;margin-top:2.2rem;margin-bottom:0;">sanblue<sup class="dot">dot</sup> — retro dev-station<br><sub>© ${year} Sandy E. Quintero · ${line}</sub></p>`
-    : "";
-  return academic + lockup;
-}
+/* La firma sanblueᵈᵒᵗ NO se inyecta aquí: vive dentro del contenido del documento
+   (los docs de Sandy ya traen masthead/footer; la plantilla de doc nuevo también). */
 
 export function buildDocHtml(doc: SourceDoc): string {
   const preset = PRESETS.find((p) => p.id === doc.preset) ?? PRESETS[0];
   const body =
     doc.kind === "md" ? (marked.parse(doc.content, { async: false }) as string) : doc.content;
-  const sig = doc.signature !== "off";
   return `<!doctype html>
 <html lang="es">
 <head><meta charset="utf-8"><style>
 ${sanblueCss}
+/* Estación: body transparente para que el fondo por página (capa vectorial del
+   organizador) llene TODA la hoja y no solo los márgenes. Sin fondo aplicado se
+   ve blanco igual. Los presets con color propio lo pisan justo después. */
+body { background: transparent; }
 ${preset.overrides}
 </style></head>
 <body>
-${sig ? MASTHEAD : ""}
 ${body}
-${sig ? footerHtml(doc) : ""}
 </body>
 </html>`;
 }

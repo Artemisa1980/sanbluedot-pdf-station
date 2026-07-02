@@ -1,6 +1,5 @@
 export type PageSize = "letter" | "a4";
 export type MarginPreset = "compact" | "apa";
-export type SignatureMode = "academic" | "professional" | "off";
 export type Rotation = 0 | 90 | 180 | 270;
 
 export interface Patch {
@@ -32,8 +31,7 @@ export interface SourceDoc {
   kind: "md" | "html";
   content: string;
   preset: string;
-  signature: SignatureMode;
-  academicLine: string;
+  // La firma sanblueᵈᵒᵗ viaja DENTRO del contenido del documento (masthead/footer en el md/html)
   compiledB64: string | null; // PDF compilado — se persiste para restaurar sin recompilar
 }
 

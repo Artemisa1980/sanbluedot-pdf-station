@@ -19,6 +19,22 @@ export function registerIpc(): void {
     );
   });
 
+  ipcMain.handle("station:importDocsDialog", async () => {
+    const res = await dialog.showOpenDialog({
+      title: "Abrir Markdown / HTML",
+      filters: [{ name: "Markdown / HTML", extensions: ["md", "markdown", "html", "htm"] }],
+      properties: ["openFile", "multiSelections"]
+    });
+    if (res.canceled) return [];
+    return Promise.all(
+      res.filePaths.map(async (fp) => ({
+        name: path.basename(fp),
+        kind: /\.(html?|htm)$/i.test(fp) ? "html" : "md",
+        content: await readFile(fp, "utf-8")
+      }))
+    );
+  });
+
   ipcMain.handle("station:exportPdfDialog", async (_e, defaultName: string, bytesB64: string) => {
     const res = await dialog.showSaveDialog({
       title: "Exportar PDF",
@@ -35,12 +51,14 @@ export function registerIpc(): void {
     return buf.toString("base64");
   });
 
-  ipcMain.handle("station:saveProjectDialog", async (_e, json: string, currentPath: string | null) => {
+  ipcMain.handle(
+    "station:saveProjectDialog",
+    async (_e, json: string, currentPath: string | null, suggestedName?: string) => {
     let target = currentPath;
     if (!target) {
       const res = await dialog.showSaveDialog({
         title: "Guardar proyecto",
-        defaultPath: "proyecto.sbstation",
+        defaultPath: `${suggestedName || "proyecto"}.sbstation`,
         filters: [{ name: "sanblueᵈᵒᵗ Station", extensions: ["sbstation"] }]
       });
       if (res.canceled || !res.filePath) return null;
@@ -48,7 +66,8 @@ export function registerIpc(): void {
     }
     await writeFile(target, json, "utf-8");
     return target;
-  });
+    }
+  );
 
   ipcMain.handle("station:openProjectDialog", async () => {
     const res = await dialog.showOpenDialog({

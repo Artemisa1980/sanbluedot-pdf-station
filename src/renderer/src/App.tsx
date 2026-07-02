@@ -4,6 +4,9 @@ import { Inspector } from "./components/Inspector";
 import { Organizer } from "./components/Organizer";
 import { Sidebar } from "./components/Sidebar";
 import { exportProject } from "./engine/exportProject";
+import { deserialize, serialize } from "./engine/projectFile";
+import { evictBytes } from "./engine/bytesCache";
+import { evictSource } from "./engine/thumbnails";
 import { useStation } from "./state/store";
 import { bytesToB64 } from "../../shared/b64";
 
@@ -21,7 +24,8 @@ export default function App() {
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [showLeft, setShowLeft] = useState(true);
   const [showRight, setShowRight] = useState(true);
-  const { project } = useStation();
+  const { project, dispatch } = useStation();
+  const [currentPath, setCurrentPath] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [toast, setToast] = useState<{ kind: "ok" | "error"; msg: string } | null>(null);
 
@@ -47,6 +51,79 @@ export default function App() {
     };
   }, []);
 
+  // Atajos de proyecto: Cmd/Ctrl+S guardar · Shift+Cmd/Ctrl+S guardar como · Cmd/Ctrl+O abrir
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const k = e.key.toLowerCase();
+      if (k === "s") {
+        e.preventDefault();
+        void handleSaveProject(e.shiftKey);
+      } else if (k === "o") {
+        e.preventDefault();
+        void handleOpenProject();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  // Título de ventana = nombre del proyecto
+  useEffect(() => {
+    document.title = `${project.name} — sanblueᵈᵒᵗ pdf-station`;
+  }, [project.name]);
+
+  function clearCaches() {
+    for (const p of project.pdfs) {
+      evictSource(p.id);
+      evictBytes(p.id);
+    }
+    for (const d of project.docs) {
+      evictSource(d.id);
+      evictBytes(d.id);
+    }
+  }
+
+  function handleNew() {
+    const hasWork = project.pages.length > 0 || project.docs.length > 0 || project.pdfs.length > 0;
+    if (hasWork && !window.confirm("¿Empezar de cero? Se descartará lo que no hayas guardado.")) return;
+    clearCaches();
+    dispatch({ type: "newProject" });
+    setCurrentPath(null);
+    setEditingDocId(null);
+  }
+
+  async function handleSaveProject(saveAs = false) {
+    try {
+      const savedPath = await window.station.saveProjectDialog(
+        serialize(project),
+        saveAs ? null : currentPath,
+        project.name
+      );
+      if (savedPath) {
+        setCurrentPath(savedPath);
+        showToast("ok", "Proyecto guardado.");
+      }
+    } catch (e) {
+      showToast("error", e instanceof Error ? e.message : "Error al guardar el proyecto.");
+    }
+  }
+
+  async function handleOpenProject() {
+    try {
+      const res = await window.station.openProjectDialog();
+      if (!res) return;
+      const loaded = deserialize(res.json);
+      clearCaches();
+      dispatch({ type: "loadProject", project: loaded });
+      setCurrentPath(res.path);
+      setEditingDocId(null);
+      showToast("ok", `Proyecto "${loaded.name}" abierto.`);
+    } catch (e) {
+      showToast("error", e instanceof Error ? e.message : "Error al abrir el proyecto.");
+    }
+  }
+
   async function handleExport() {
     setExporting(true);
     try {
@@ -70,7 +147,18 @@ export default function App() {
           <span className="brand text-[15px]">
             sanblue<sup>dot</sup>
           </span>
-          <span className="section-label">retro PDF station</span>
+          <span className="section-label">retro pdf-station</span>
+          <div className="ml-3 flex gap-1.5">
+            <button className="btn-ghost" onClick={handleNew} title="Proyecto nuevo (empezar de cero)">
+              Nuevo
+            </button>
+            <button className="btn-ghost" onClick={handleOpenProject} title="Abrir proyecto .sbstation (Cmd+O)">
+              Abrir proyecto
+            </button>
+            <button className="btn-ghost" onClick={() => handleSaveProject(false)} title="Guardar proyecto (Cmd+S)">
+              Guardar
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -107,7 +195,8 @@ export default function App() {
       <main className="flex min-h-0 flex-1">
         {showLeft && <Sidebar onOpenDoc={setEditingDocId} />}
 
-        {editingDocId ? (
+        {/* Guard: si el doc abierto ya no existe (eliminado / proyecto nuevo), volver al organizador */}
+        {editingDocId && project.docs.some((d) => d.id === editingDocId) ? (
           <DocEditor docId={editingDocId} onClose={() => setEditingDocId(null)} />
         ) : (
           <Organizer />

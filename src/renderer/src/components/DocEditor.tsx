@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useStation } from "../state/store";
 import { buildDocHtml, compileDoc } from "../engine/compile";
 import { PRESETS } from "../engine/presets";
-import type { SignatureMode } from "../../../shared/types";
 
 interface Props {
   docId: string;
@@ -51,9 +50,9 @@ export function DocEditor({ docId, onClose }: Props) {
 
   return (
     <section className="flex min-w-0 flex-1 flex-col">
-      {/* Barra del editor */}
+      {/* Barra del editor — flex-wrap: en ventanas angostas los controles bajan de línea sin romperse */}
       <div
-        className="flex h-[44px] shrink-0 items-center gap-2 border-b px-4"
+        className="flex min-h-[44px] shrink-0 flex-wrap items-center gap-2 border-b px-4 py-1.5"
         style={{ background: "var(--panel-header)", borderColor: "var(--border)" }}
       >
         <button
@@ -108,37 +107,13 @@ export function DocEditor({ docId, onClose }: Props) {
           ))}
         </select>
 
-        <select
-          className="btn-ghost"
-          style={{ background: "var(--input-bg)" }}
-          value={doc.signature}
-          onChange={(e) =>
-            dispatch({ type: "updateDoc", docId, patch: { signature: e.target.value as SignatureMode } })
-          }
-          title="Firma sanblueᵈᵒᵗ"
-        >
-          <option value="academic">Firma académica</option>
-          <option value="professional">Firma profesional</option>
-          <option value="off">Sin firma</option>
-        </select>
-
-        {doc.signature === "academic" && (
-          <input
-            className="w-[220px] rounded border px-2 py-1 text-[12px]"
-            style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
-            placeholder="Materia · Semana X de Y · Tema"
-            value={doc.academicLine}
-            onChange={(e) => dispatch({ type: "updateDoc", docId, patch: { academicLine: e.target.value } })}
-          />
-        )}
-
         <button
-          className="btn-ghost"
+          className="btn-ghost whitespace-nowrap"
           style={{ borderColor: "var(--accent)", background: "var(--accent-soft)" }}
           disabled={compiling}
           onClick={handleCompile}
         >
-          {compiling ? "Compilando…" : "⚡ Compilar al documento"}
+          {compiling ? "Compilando…" : "⚡ Compilar"}
         </button>
       </div>
 

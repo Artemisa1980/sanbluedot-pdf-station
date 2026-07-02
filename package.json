@@ -1,6 +1,6 @@
 {
   "name": "sanbluedot-pdf-station",
-  "productName": "sanblueᵈᵒᵗ PDF Station",
+  "productName": "sanblueᵈᵒᵗ pdf-station",
   "version": "1.0.0",
   "private": true,
   "main": "./out/main/index.js",

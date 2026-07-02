@@ -8,7 +8,7 @@ function createWindow(): void {
     height: 900,
     minWidth: 1024,
     minHeight: 640,
-    title: "sanblueᵈᵒᵗ PDF Station",
+    title: "sanblueᵈᵒᵗ pdf-station",
     webPreferences: {
       preload: path.join(__dirname, "../preload/index.js")
     }

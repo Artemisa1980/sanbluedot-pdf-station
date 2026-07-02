@@ -5,7 +5,13 @@ import { evictSource } from "../engine/thumbnails";
 import { PagePicker } from "./PagePicker";
 import type { ImportedPdf, PageRef, SourceDoc } from "../../../shared/types";
 
-const NEW_MD_TEMPLATE = `# Título del documento
+/* La firma viaja en el contenido: los docs nuevos nacen firmados y Sandy la borra si no la quiere */
+const NEW_MD_TEMPLATE = `<table class="masthead" width="100%"><tr>
+<td class="brand-cell"><span class="brand">sanblue<sup class="dot">dot</sup></span></td>
+<td class="tagline-cell">retro dev-station</td>
+</tr></table>
+
+# Título del documento
 
 Escribe aquí. **Negritas**, *cursivas*, listas:
 
@@ -15,6 +21,11 @@ Escribe aquí. **Negritas**, *cursivas*, listas:
 ## Sección
 
 > Una cita elegante.
+
+<div class="site-footer">
+<span class="brand">sanblue<sup class="dot">dot</sup></span> — retro dev-station
+<span class="copyright">© ${new Date().getFullYear()} Sandy E. Quintero</span>
+</div>
 `;
 
 interface SidebarProps {
@@ -33,12 +44,28 @@ export function Sidebar({ onOpenDoc }: SidebarProps) {
       kind,
       content: kind === "md" ? NEW_MD_TEMPLATE : "<h1>Título del documento</h1>\n<p>Escribe aquí.</p>",
       preset: "sanbluedot",
-      signature: "professional",
-      academicLine: "",
       compiledB64: null
     };
     dispatch({ type: "addDoc", doc });
     onOpenDoc(doc.id);
+  }
+
+  async function handleOpenDocs() {
+    const files = await window.station.importDocsDialog();
+    let firstId: string | null = null;
+    for (const f of files) {
+      const doc: SourceDoc = {
+        id: newId(),
+        name: f.name,
+        kind: f.kind,
+        content: f.content,
+        preset: "sanbluedot",
+        compiledB64: null
+      };
+      dispatch({ type: "addDoc", doc });
+      if (!firstId) firstId = doc.id;
+    }
+    if (firstId) onOpenDoc(firstId); // abre el primero en el editor, listo para compilar
   }
 
   async function handleImport() {
@@ -117,6 +144,9 @@ export function Sidebar({ onOpenDoc }: SidebarProps) {
             ＋ Doc HTML
           </button>
         </div>
+        <button className="btn-ghost w-full" onClick={handleOpenDocs} title="Abrir archivos .md/.html tuyos">
+          ⌲ Abrir MD/HTML…
+        </button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto px-4 pb-4">
