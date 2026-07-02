@@ -118,7 +118,10 @@ export default function App() {
       dispatch({ type: "loadProject", project: loaded });
       setCurrentPath(res.path);
       setEditingDocId(null);
-      showToast("ok", `Proyecto "${loaded.name}" abierto.`);
+      showToast(
+        "ok",
+        `Proyecto "${loaded.name}" abierto — ${loaded.pages.length} páginas · ${loaded.pdfs.length} PDF · ${loaded.docs.length} doc.`
+      );
     } catch (e) {
       showToast("error", e instanceof Error ? e.message : "Error al abrir el proyecto.");
     }

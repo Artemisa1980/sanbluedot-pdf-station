@@ -72,7 +72,11 @@ export function registerIpc(): void {
   ipcMain.handle("station:openProjectDialog", async () => {
     const res = await dialog.showOpenDialog({
       title: "Abrir proyecto",
-      filters: [{ name: "sanblueᵈᵒᵗ Station", extensions: ["sbstation"] }],
+      // macOS a veces no reconoce extensiones custom → el segundo filtro garantiza poder elegir
+      filters: [
+        { name: "sanblueᵈᵒᵗ Station", extensions: ["sbstation"] },
+        { name: "Todos los archivos", extensions: ["*"] }
+      ],
       properties: ["openFile"]
     });
     if (res.canceled || res.filePaths.length === 0) return null;
