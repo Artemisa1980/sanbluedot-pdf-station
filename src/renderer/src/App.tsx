@@ -8,7 +8,9 @@ import { evictBytes } from "./engine/bytesCache";
 import { evictSource } from "./engine/thumbnails";
 import { useStation } from "./state/store";
 import { useAutoRecompile } from "./state/useAutoRecompile";
+import { useDraftAutosave } from "./state/useDraftAutosave";
 import { bytesToB64 } from "../../shared/b64";
+import badgeUrl from "./assets/sanblue-badge.png";
 
 function useTheme() {
   const [dark, setDark] = useState(() => localStorage.getItem("station-theme") === "dark");
@@ -31,11 +33,52 @@ export default function App() {
   const [currentPath, setCurrentPath] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [toast, setToast] = useState<{ kind: "ok" | "error"; msg: string } | null>(null);
+  // false hasta resolver el prompt de restauración — si el autosave arrancara antes,
+  // borraría el borrador que estamos por ofrecer (dirty nace en false)
+  const [draftReady, setDraftReady] = useState(false);
 
   function showToast(kind: "ok" | "error", msg: string) {
     setToast({ kind, msg });
     setTimeout(() => setToast(null), 5000);
   }
+
+  // Borrador de recuperación: si existe al arrancar, la app murió con trabajo sin guardar
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const draft = await window.station.draftRead();
+        if (!cancelled && draft) {
+          const when = draft.savedAt ? new Date(draft.savedAt).toLocaleString() : "";
+          const restore = window.confirm(
+            `Hay un borrador de recuperación de "${draft.name}"${when ? ` (${when})` : ""} — la app se cerró sin guardar.\n\nAceptar = restaurarlo · Cancelar = descartarlo (se borra).`
+          );
+          if (restore) {
+            const project = deserialize(draft.json);
+            dispatch({ type: "loadProject", project, dirty: true });
+            setCurrentPath(draft.filePath);
+            showToast("ok", `Borrador restaurado: "${project.name}" — asiéntalo con Cmd+S.`);
+          } else {
+            await window.station.draftClear();
+          }
+        }
+      } catch (e) {
+        showToast(
+          "error",
+          e instanceof Error ? e.message : "No se pudo leer el borrador de recuperación."
+        );
+      } finally {
+        if (!cancelled) setDraftReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Autosave: borrador rotativo en userData mientras haya cambios sin guardar
+  useDraftAutosave(project, dirty, currentPath, draftReady);
 
   function openDoc(docId: string, view: EditorView = "preview") {
     setEditorView(view);
@@ -168,6 +211,12 @@ export default function App() {
         style={{ background: "var(--panel-bg)", borderColor: "var(--border)" }}
       >
         <div className="flex items-center gap-2.5">
+          <img
+            src={badgeUrl}
+            alt=""
+            className="h-7 w-7 shrink-0 select-none"
+            draggable={false}
+          />
           <span className="brand text-[15px]">
             sanblue<sup>dot</sup>
           </span>

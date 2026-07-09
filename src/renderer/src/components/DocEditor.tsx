@@ -258,11 +258,11 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
         </button>
 
         <button
-          className="btn-ghost whitespace-nowrap"
+          className="btn-ghost tip whitespace-nowrap"
           style={exportFlash ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}
           disabled={exportingDoc}
           onClick={handleExportDoc}
-          title="Convertir SOLO este documento a PDF (no toca el proyecto)"
+          data-tip="Convertir SOLO este documento a PDF (no toca el proyecto)"
         >
           {exportingDoc ? "Exportando…" : exportFlash ? "✓ PDF" : "⬇ PDF"}
         </button>

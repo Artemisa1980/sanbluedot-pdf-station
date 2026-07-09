@@ -1,4 +1,4 @@
-import { marked } from "marked";
+import { marked, type Token, type Tokens } from "marked";
 import { PDFDocument } from "pdf-lib";
 import sanblueCss from "../assets/sanbluedot-pdf.css?raw";
 import { b64ToBytes } from "../../../shared/b64";
@@ -10,6 +10,31 @@ import type { DocStyle, SourceDoc, StationProject } from "../../../shared/types"
 
 /* La firma sanblueᵈᵒᵗ NO se inyecta aquí: vive dentro del contenido del documento
    (los docs de Sandy ya traen masthead/footer; la plantilla de doc nuevo también). */
+
+/* GFM también tacha con UNA tilde (~texto~) — choca con la ~ de "aproximado" (~500):
+   bastaba otra ~ pegada a texto más adelante para tachar medio párrafo (Sandy, 2026-07-09).
+   En la estación solo ~~doble~~ tacha; la ~ suelta es SIEMPRE literal, sin necesidad de \~.
+   Devolver false/undefined con tilde presente haría fallback al del original de marked
+   (que sí tacha con una): por eso la ~ suelta se consume como token de texto. */
+const DEL_DOBLE = /^~~(?=[^\s~])([\s\S]*?[^\s~])~~(?=[^~]|$)/;
+const DEL_ORIGINAL_MARKED = /^(~~?)(?=[^\s~])([\s\S]*?[^\s~])\1(?=[^~]|$)/;
+marked.use({
+  tokenizer: {
+    del(src: string) {
+      const doble = DEL_DOBLE.exec(src);
+      if (doble) {
+        // Los tipos de marked no declaran this.lexer en overrides, pero en runtime existe
+        // (verificado contra marked 12.0.2 real, 10/10 casos)
+        const self = this as unknown as { lexer: { inlineTokens(s: string): Token[] } };
+        return { type: "del", raw: doble[0], text: doble[1], tokens: self.lexer.inlineTokens(doble[1]) };
+      }
+      if (DEL_ORIGINAL_MARKED.test(src)) {
+        return { type: "text", raw: "~", text: "~" } as unknown as Tokens.Del;
+      }
+      return undefined;
+    }
+  }
+});
 
 /** CSS del estilo granular — pisa al preset. Todo es CSS puro → printToPDF vectorial. */
 function granularCss(style: DocStyle): string {

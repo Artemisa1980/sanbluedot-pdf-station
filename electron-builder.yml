@@ -22,6 +22,7 @@ dmg:
   title: sanblueᵈᵒᵗ pdf-station
 
 win:
+  icon: resources/icon.png
   target:
     - target: nsis
       arch: [x64]

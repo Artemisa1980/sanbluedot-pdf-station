@@ -28,7 +28,7 @@ export function emptyProject(): StationProject {
 
 export type Action =
   | { type: "newProject" }
-  | { type: "loadProject"; project: StationProject }
+  | { type: "loadProject"; project: StationProject; dirty?: boolean }
   | { type: "markSaved" }
   | { type: "addPdf"; pdf: ImportedPdf; pageRefs: PageRef[] }
   | { type: "addDoc"; doc: SourceDoc }
@@ -81,7 +81,8 @@ function reducer(state: StationState, action: Action): StationState {
       return { project: emptyProject(), selection: [], dirty: false };
 
     case "loadProject":
-      return { project: action.project, selection: [], dirty: false };
+      // dirty:true = borrador de recuperación restaurado (aún no vive en un .sbstation guardado)
+      return { project: action.project, selection: [], dirty: action.dirty ?? false };
 
     case "markSaved":
       return state.dirty ? { ...state, dirty: false } : state;

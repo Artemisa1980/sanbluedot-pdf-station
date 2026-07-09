@@ -5,10 +5,13 @@ import { evictSource } from "../engine/thumbnails";
 import { FONT_CHOICES, fontById } from "../engine/fonts";
 import { PRESETS, presetById, resolveStyle } from "../engine/presets";
 import { sourceFor } from "../engine/sources";
+import { useMyStyles } from "../state/useMyStyles";
+import { DraftsModal } from "./DraftsModal";
 import { PagePicker } from "./PagePicker";
 import { PatchEditor } from "./PatchEditor";
 import { bytesToB64 } from "../../../shared/b64";
 import type {
+  CustomStylePreset,
   DocStyle,
   ImportedPdf,
   MarginPreset,
@@ -63,6 +66,7 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, recompiling }: P
   const [queue, setQueue] = useState<ImportedPdf[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [patchTarget, setPatchTarget] = useState<{ pageId: string; patch: Patch | null } | null>(null);
+  const [showDrafts, setShowDrafts] = useState(false);
 
   /* ---------- importación (diálogo + drag & drop desde Finder) ---------- */
 
@@ -248,6 +252,13 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, recompiling }: P
         <p className="mt-2 text-[11px]" style={{ fontFamily: "var(--mono)", color: "var(--text-muted)" }}>
           {project.pages.length} pág · {project.pdfs.length} PDF · {project.docs.length} doc
         </p>
+        <button
+          className="btn-ghost tip mt-2 w-full"
+          onClick={() => setShowDrafts(true)}
+          data-tip="Ver y borrar el borrador automático de recuperación"
+        >
+          🗂 Borradores de recuperación
+        </button>
       </section>
 
       {/* ══ COLA DE DOCUMENTOS ══ */}
@@ -477,6 +488,8 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, recompiling }: P
         />
       )}
 
+      {showDrafts && <DraftsModal onClose={() => setShowDrafts(false)} />}
+
       {patchTarget && singlePdfPage && singleSrc && (
         <PatchEditor
           page={singlePdfPage}
@@ -654,10 +667,109 @@ function DocStyleControls({
         <ColorField label="Texto TH" value={style.thText} onChange={(v) => onPatch(doc, { thText: v })} />
       </div>
 
+      <MyStylesBlock doc={doc} style={style} />
+
       <p className="text-[10px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
         Todo es CSS de compilación — el PDF sale 100% vectorial, nítido a cualquier zoom. Los
         cambios se aplican solos al documento maestro (recompila en segundo plano).
       </p>
+    </div>
+  );
+}
+
+/* ---------- Mis estilos: presets custom de Sandy (v1.6) ---------- */
+
+function MyStylesBlock({ doc, style }: { doc: SourceDoc; style: DocStyle }) {
+  const { dispatch } = useStation();
+  const { styles, save, remove } = useMyStyles();
+  const [naming, setNaming] = useState(false);
+  const [name, setName] = useState("");
+
+  function apply(s: CustomStylePreset) {
+    // El doc recibe su COPIA de los valores + el preset de fábrica base (aporta su CSS
+    // extra al compilar): borrar el estilo custom después jamás cambia este documento
+    dispatch({
+      type: "updateDoc",
+      docId: doc.id,
+      patch: { preset: s.baseId, style: { ...s.style } }
+    });
+  }
+
+  function handleSave() {
+    if (!name.trim()) return;
+    save(name, doc.preset, style);
+    setName("");
+    setNaming(false);
+  }
+
+  return (
+    <div>
+      <div className="section-label mb-1">Mis estilos</div>
+
+      {styles.length > 0 && (
+        <ul className="flex flex-col gap-1">
+          {styles.map((s) => (
+            <li key={s.id} className="group flex items-center gap-1.5">
+              <button
+                className="btn-ghost flex min-w-0 flex-1 items-center gap-2 text-left"
+                title={`Aplicar "${s.label}" a este documento`}
+                onClick={() => apply(s)}
+              >
+                <span
+                  className="h-3 w-3 shrink-0 rounded-sm border"
+                  style={{ background: s.style.bgColor, borderColor: "var(--border-strong)" }}
+                />
+                <span className="min-w-0 flex-1 truncate">{s.label}</span>
+              </button>
+              <button
+                className="shrink-0 rounded px-0.5 text-[12px] opacity-0 transition-opacity group-hover:opacity-100"
+                style={{ color: "var(--danger)" }}
+                title="Borrar este estilo (tus documentos no cambian)"
+                onClick={() => {
+                  if (window.confirm(`¿Borrar el estilo "${s.label}"? Los documentos que lo usan no cambian.`))
+                    remove(s.id);
+                }}
+              >
+                ✕
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {naming ? (
+        <div className="mt-1.5 flex items-center gap-1.5">
+          <input
+            autoFocus
+            className="min-w-0 flex-1 rounded border px-2 py-1 text-[12px]"
+            style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
+            placeholder="Nombre del estilo…"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSave();
+              if (e.key === "Escape") setNaming(false);
+            }}
+          />
+          <button className="btn-ghost shrink-0" disabled={!name.trim()} onClick={handleSave}>
+            ✓
+          </button>
+        </div>
+      ) : (
+        <button
+          className="btn-ghost mt-1.5 w-full"
+          title="Guardar la combinación actual (fuente, colores, tabla) con nombre — queda disponible en todos tus proyectos"
+          onClick={() => setNaming(true)}
+        >
+          ＋ Guardar estilo actual…
+        </button>
+      )}
+
+      {styles.length === 0 && !naming && (
+        <p className="mt-1 text-[10px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
+          Guarda tus combinaciones ganadoras con nombre y reúsalas en cualquier proyecto.
+        </p>
+      )}
     </div>
   );
 }

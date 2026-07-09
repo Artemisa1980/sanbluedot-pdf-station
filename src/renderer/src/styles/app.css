@@ -117,6 +117,46 @@ body {
 }
 .btn-ghost:disabled { opacity: 0.45; cursor: default; box-shadow: none; }
 
+/* Tooltip propio (reemplaza el `title` nativo de Chromium, que en macOS puede quedar
+   flotando "pegado" sobre el documento): solo existe mientras el puntero está sobre el botón */
+.tip { position: relative; }
+.tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  z-index: 60;
+  width: max-content;
+  max-width: 260px;
+  padding: 5px 9px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--panel-bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  box-shadow: var(--retro-sm);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s, visibility 0.12s;
+}
+.tip:hover::after {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0.45s;
+}
+/* Candado anti-fantasma: al hacer CLICK (y mientras la exportación/diálogo de guardar
+   tiene el botón deshabilitado) el tooltip se oculta al instante, pase lo que pase */
+.tip:active::after,
+.tip:disabled::after {
+  display: none;
+}
+
 /* Tarjeta retro: contenedor con borde fuerte y sombra dura (paneles, secciones, modales) */
 .card-retro {
   border: 1.5px solid var(--border-strong);

@@ -36,6 +36,17 @@ export interface DocStyle {
   thText: string;
 }
 
+/** Preset personalizado de Sandy ("Mis estilos") — vive en la APP (userData), no en el
+ *  proyecto: disponible en todos los proyectos. Al aplicarlo, el doc recibe su COPIA de
+ *  los valores → borrar el preset después jamás cambia documentos existentes. */
+export interface CustomStylePreset {
+  id: string;
+  label: string;
+  /** Preset de fábrica del que partió — aporta su CSS extra (overrides) al compilar */
+  baseId: string;
+  style: DocStyle;
+}
+
 export interface SourceDoc {
   id: string;
   name: string;
