@@ -271,7 +271,7 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, recompiling }: P
         </div>
 
         <div
-          className={`dropzone flex flex-col items-center justify-center gap-1 px-3 py-4 text-center ${dragOver ? "drag-over" : ""}`}
+          className={`dropzone tip flex flex-col items-center justify-center gap-1 px-3 py-4 text-center ${dragOver ? "drag-over" : ""}`}
           onClick={handlePick}
           onDragOver={(e) => {
             e.preventDefault();
@@ -279,7 +279,7 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, recompiling }: P
           }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
-          title="PDF, Markdown o HTML"
+          data-tip="PDF, Markdown o HTML"
         >
           <span className="text-[16px]" style={{ color: "var(--text-muted)" }}>
             ⇪
@@ -684,6 +684,8 @@ function MyStylesBlock({ doc, style }: { doc: SourceDoc; style: DocStyle }) {
   const { styles, save, remove } = useMyStyles();
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState("");
+  // Estilo elegido en el desplegable — habilita el ✕ de borrado contextual
+  const [selectedId, setSelectedId] = useState("");
 
   function apply(s: CustomStylePreset) {
     // El doc recibe su COPIA de los valores + el preset de fábrica base (aporta su CSS
@@ -693,6 +695,22 @@ function MyStylesBlock({ doc, style }: { doc: SourceDoc; style: DocStyle }) {
       docId: doc.id,
       patch: { preset: s.baseId, style: { ...s.style } }
     });
+  }
+
+  // Elegir en el desplegable = aplicar al documento
+  function choose(id: string) {
+    setSelectedId(id);
+    const s = styles.find((x) => x.id === id);
+    if (s) apply(s);
+  }
+
+  function handleDelete() {
+    const s = styles.find((x) => x.id === selectedId);
+    if (!s) return;
+    if (window.confirm(`¿Borrar el estilo "${s.label}"? Los documentos que lo usan no cambian.`)) {
+      remove(s.id);
+      setSelectedId("");
+    }
   }
 
   function handleSave() {
@@ -707,34 +725,32 @@ function MyStylesBlock({ doc, style }: { doc: SourceDoc; style: DocStyle }) {
       <div className="section-label mb-1">Mis estilos</div>
 
       {styles.length > 0 && (
-        <ul className="flex flex-col gap-1">
-          {styles.map((s) => (
-            <li key={s.id} className="group flex items-center gap-1.5">
-              <button
-                className="btn-ghost flex min-w-0 flex-1 items-center gap-2 text-left"
-                title={`Aplicar "${s.label}" a este documento`}
-                onClick={() => apply(s)}
-              >
-                <span
-                  className="h-3 w-3 shrink-0 rounded-sm border"
-                  style={{ background: s.style.bgColor, borderColor: "var(--border-strong)" }}
-                />
-                <span className="min-w-0 flex-1 truncate">{s.label}</span>
-              </button>
-              <button
-                className="shrink-0 rounded px-0.5 text-[12px] opacity-0 transition-opacity group-hover:opacity-100"
-                style={{ color: "var(--danger)" }}
-                title="Borrar este estilo (tus documentos no cambian)"
-                onClick={() => {
-                  if (window.confirm(`¿Borrar el estilo "${s.label}"? Los documentos que lo usan no cambian.`))
-                    remove(s.id);
-                }}
-              >
-                ✕
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div className="flex items-center gap-1.5">
+          {/* Desplegable: elegir = aplicar. Una sola línea aunque tengas muchos estilos. */}
+          <select
+            className="btn-ghost min-w-0 flex-1"
+            style={{ background: "var(--input-bg)" }}
+            value={selectedId}
+            onChange={(e) => choose(e.target.value)}
+          >
+            <option value="">Aplicar un estilo…</option>
+            {styles.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+          {selectedId && styles.some((s) => s.id === selectedId) && (
+            <button
+              className="shrink-0 rounded px-1 text-[12px]"
+              style={{ color: "var(--danger)" }}
+              title="Borrar el estilo elegido (tus documentos no cambian)"
+              onClick={handleDelete}
+            >
+              ✕
+            </button>
+          )}
+        </div>
       )}
 
       {naming ? (

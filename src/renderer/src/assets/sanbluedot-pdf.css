@@ -104,7 +104,12 @@ pre {
   white-space: pre-wrap;      /* envuelve líneas largas — un PDF no tiene scroll */
   overflow-wrap: break-word;
   word-break: break-word;
-  break-inside: avoid;
+  /* Un bloque largo llena la página en vez de saltar entero y dejar hueco en blanco
+     (Sandy, 2026-07-11). orphans/widows impiden que el corte deje 1-2 líneas sueltas.
+     No cambia la presentación del bloque — solo dónde puede partirse entre páginas. */
+  break-inside: auto;
+  orphans: 3;
+  widows: 3;
 }
 pre code {
   background: none;
