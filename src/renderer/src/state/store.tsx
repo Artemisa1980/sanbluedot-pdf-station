@@ -120,14 +120,21 @@ function reducer(state: StationState, action: Action): StationState {
       const byIndex = new Map<number, PageRef[]>();
       for (const p of project.pages) {
         if (p.srcId !== action.docId) continue;
+        if (p.pageIndex >= action.pageCount) continue; // el doc encogió: esa hoja ya no existe
         const arr = byIndex.get(p.pageIndex) ?? [];
         arr.push(p);
         byIndex.set(p.pageIndex, arr);
       }
-      const fresh: PageRef[] = Array.from(
-        { length: action.pageCount },
-        (_, i) =>
-          byIndex.get(i)?.shift() ?? {
+      // Conserva TODAS las refs vivas de cada índice, no solo la primera: un índice puede
+      // tener varias si la hoja fue duplicada, y quedarse con una las borraba en silencio
+      // (con su rotación, fondo y parches) en la siguiente recompilación.
+      const fresh: PageRef[] = [];
+      for (let i = 0; i < action.pageCount; i++) {
+        const kept = byIndex.get(i);
+        if (kept && kept.length > 0) {
+          fresh.push(...kept);
+        } else {
+          fresh.push({
             id: newId(),
             srcId: action.docId,
             srcKind: "doc",
@@ -135,8 +142,9 @@ function reducer(state: StationState, action: Action): StationState {
             rotation: 0,
             background: null,
             patches: []
-          }
-      );
+          });
+        }
+      }
       const at = oldIndex === -1 ? rest.length : Math.min(oldIndex, rest.length);
       const pages = [...rest.slice(0, at), ...fresh, ...rest.slice(at)];
       const keep = new Set(pages.map((p) => p.id));
