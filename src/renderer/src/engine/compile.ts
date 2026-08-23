@@ -65,7 +65,10 @@ export function buildDocHtml(doc: SourceDoc): string {
     doc.kind === "md" ? (marked.parse(doc.content, { async: false }) as string) : doc.content;
   return `<!doctype html>
 <html lang="es">
-<head><meta charset="utf-8"><style>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: file: blob:; style-src 'unsafe-inline'; font-src data: file:; script-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<style>
 ${font.faces ?? ""}
 ${sanblueCss}
 /* Estación: body transparente para que el fondo por página (capa vectorial del
@@ -96,11 +99,14 @@ export async function compileDocRaw(doc: SourceDoc, project: StationProject): Pr
 export async function compileDoc(
   doc: SourceDoc,
   project: StationProject
-): Promise<{ compiledB64: string; pageCount: number }> {
+): Promise<{ compiledB64: string; previousPageCount: number; pageCount: number }> {
+  const previousPageCount = doc.compiledB64
+    ? (await PDFDocument.load(b64ToBytes(doc.compiledB64))).getPageCount()
+    : 0;
   const compiledB64 = await compileDocRaw(doc, project);
   const pdf = await PDFDocument.load(b64ToBytes(compiledB64));
   // Invalidar miniaturas y bytes viejos del doc — la versión anterior ya no existe
   evictSource(doc.id);
   evictBytes(doc.id);
-  return { compiledB64, pageCount: pdf.getPageCount() };
+  return { compiledB64, previousPageCount, pageCount: pdf.getPageCount() };
 }

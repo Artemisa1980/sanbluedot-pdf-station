@@ -9,6 +9,7 @@ import type {
   SourceDoc,
   StationProject
 } from "../../../shared/types";
+import { reconcileDocPages } from "./reconcileDocPages";
 
 export function newId(): string {
   return crypto.randomUUID();
@@ -33,7 +34,13 @@ export type Action =
   | { type: "addPdf"; pdf: ImportedPdf; pageRefs: PageRef[] }
   | { type: "addDoc"; doc: SourceDoc }
   | { type: "updateDoc"; docId: string; patch: Partial<SourceDoc> }
-  | { type: "setDocPages"; docId: string; compiledB64: string; pageCount: number }
+  | {
+      type: "setDocPages";
+      docId: string;
+      compiledB64: string;
+      previousPageCount: number;
+      pageCount: number;
+    }
   | { type: "removeSource"; srcId: string }
   | { type: "moveSource"; srcId: string; dir: -1 | 1 }
   | { type: "insertPages"; pageRefs: PageRef[]; atIndex: number }
@@ -112,41 +119,13 @@ function reducer(state: StationState, action: Action): StationState {
       };
 
     case "setDocPages": {
-      // Reemplaza las páginas del doc conservando la posición de la primera aparición.
-      // Reutiliza las refs viejas índice a índice: recompilar (manual o automático) no
-      // pierde id (la selección sigue viva), rotación, fondo ni parches de esas hojas.
-      const oldIndex = project.pages.findIndex((p) => p.srcId === action.docId);
-      const rest = project.pages.filter((p) => p.srcId !== action.docId);
-      const byIndex = new Map<number, PageRef[]>();
-      for (const p of project.pages) {
-        if (p.srcId !== action.docId) continue;
-        if (p.pageIndex >= action.pageCount) continue; // el doc encogió: esa hoja ya no existe
-        const arr = byIndex.get(p.pageIndex) ?? [];
-        arr.push(p);
-        byIndex.set(p.pageIndex, arr);
-      }
-      // Conserva TODAS las refs vivas de cada índice, no solo la primera: un índice puede
-      // tener varias si la hoja fue duplicada, y quedarse con una las borraba en silencio
-      // (con su rotación, fondo y parches) en la siguiente recompilación.
-      const fresh: PageRef[] = [];
-      for (let i = 0; i < action.pageCount; i++) {
-        const kept = byIndex.get(i);
-        if (kept && kept.length > 0) {
-          fresh.push(...kept);
-        } else {
-          fresh.push({
-            id: newId(),
-            srcId: action.docId,
-            srcKind: "doc",
-            pageIndex: i,
-            rotation: 0,
-            background: null,
-            patches: []
-          });
-        }
-      }
-      const at = oldIndex === -1 ? rest.length : Math.min(oldIndex, rest.length);
-      const pages = [...rest.slice(0, at), ...fresh, ...rest.slice(at)];
+      const pages = reconcileDocPages({
+        pages: project.pages,
+        docId: action.docId,
+        previousPageCount: action.previousPageCount,
+        nextPageCount: action.pageCount,
+        createId: newId
+      });
       const keep = new Set(pages.map((p) => p.id));
       return {
         selection: state.selection.filter((id) => keep.has(id)),

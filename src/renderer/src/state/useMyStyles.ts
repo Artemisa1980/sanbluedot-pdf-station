@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { newId } from "./store";
 import type { CustomStylePreset, DocStyle } from "../../../shared/types";
 
@@ -10,17 +10,36 @@ import type { CustomStylePreset, DocStyle } from "../../../shared/types";
  */
 export function useMyStyles() {
   const [styles, setStyles] = useState<CustomStylePreset[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const writeVersion = useRef(0);
+  const writeQueue = useRef(Promise.resolve());
 
   useEffect(() => {
     window.station
       .myStylesRead()
-      .then(setStyles)
-      .catch(() => setStyles([]));
+      .then((saved) => {
+        setStyles(saved);
+        setError(null);
+      })
+      .catch(() => {
+        setStyles([]);
+        setError("No se pudieron leer Mis estilos.");
+      });
   }, []);
 
   function persist(next: CustomStylePreset[]): void {
+    const previous = styles;
+    const version = ++writeVersion.current;
     setStyles(next);
-    void window.station.myStylesWrite(next);
+    setError(null);
+    writeQueue.current = writeQueue.current
+      .catch(() => {})
+      .then(() => window.station.myStylesWrite(next))
+      .catch(() => {
+        if (writeVersion.current !== version) return;
+        setStyles(previous);
+        setError("No se pudo guardar el cambio en Mis estilos.");
+      });
   }
 
   /** Guarda la combinación actual; mismo nombre = reemplazar (actualizar sin duplicar). */
@@ -35,5 +54,5 @@ export function useMyStyles() {
     persist(styles.filter((s) => s.id !== id));
   }
 
-  return { styles, save, remove };
+  return { styles, error, save, remove };
 }

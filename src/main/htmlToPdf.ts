@@ -1,4 +1,4 @@
-import { BrowserWindow } from "electron";
+import { BrowserWindow, session, type Session } from "electron";
 import { writeFile, rm } from "fs/promises";
 import { tmpdir } from "os";
 import path from "path";
@@ -8,6 +8,21 @@ const MARGINS = {
   compact: { top: 0.709, bottom: 0.709, left: 0.787, right: 0.787 },
   apa: { top: 1, bottom: 1, left: 1, right: 1 }
 } as const;
+
+let isolatedCompileSession: Session | null = null;
+
+function compileSession(): Session {
+  if (isolatedCompileSession) return isolatedCompileSession;
+  const isolated = session.fromPartition("pdf-station-compile", { cache: false });
+  // Defensa adicional a la CSP: la compilación acepta recursos file:/data: locales,
+  // pero nunca necesita HTTP(S), incluso si el HTML importado intenta pedirlo.
+  isolated.webRequest.onBeforeRequest(
+    { urls: ["http://*/*", "https://*/*"] },
+    (_details, callback) => callback({ cancel: true })
+  );
+  isolatedCompileSession = isolated;
+  return isolated;
+}
 
 export interface HtmlToPdfOptions {
   pageSize: "letter" | "a4";
@@ -24,7 +39,18 @@ export interface HtmlToPdfOptions {
 export async function htmlToPdf(html: string, opts: HtmlToPdfOptions): Promise<Buffer> {
   const tmp = path.join(tmpdir(), `station-compile-${Date.now()}-${Math.random().toString(36).slice(2)}.html`);
   await writeFile(tmp, html, "utf-8");
-  const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      session: compileSession(),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true
+    }
+  });
+  win.webContents.on("will-navigate", (event) => event.preventDefault());
+  win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   try {
     await win.loadFile(tmp);
     // Esperar a que las fuentes web terminen de cargar antes de imprimir

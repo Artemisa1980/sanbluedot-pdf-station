@@ -13,6 +13,16 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
  */
 const docs = new Map<string, Promise<PDFDocumentProxy>>();
 const thumbs = new Map<string, Promise<string>>();
+const MAX_THUMBNAILS = 120;
+
+function rememberThumbnail(key: string, value: Promise<string>): void {
+  thumbs.set(key, value);
+  while (thumbs.size > MAX_THUMBNAILS) {
+    const oldest = thumbs.keys().next().value as string | undefined;
+    if (oldest === undefined) break;
+    thumbs.delete(oldest);
+  }
+}
 
 function docFor(srcId: string, bytes: Uint8Array): Promise<PDFDocumentProxy> {
   let d = docs.get(srcId);
@@ -51,6 +61,11 @@ export function renderPageDataUrl(
 ): Promise<string> {
   const key = `${srcId}:${pageIndex}:${targetWidth}:${transparent ? "t" : "o"}`;
   let t = thumbs.get(key);
+  if (t) {
+    // Map conserva orden de inserción: reinsertar convierte el acceso en LRU real.
+    thumbs.delete(key);
+    thumbs.set(key, t);
+  }
   if (!t) {
     t = (async () => {
       const doc = await docFor(srcId, bytes);
@@ -70,7 +85,11 @@ export function renderPageDataUrl(
       }).promise;
       return canvas.toDataURL("image/png");
     })();
-    thumbs.set(key, t);
+    rememberThumbnail(key, t);
+    void t.catch(() => {
+      // Un fallo transitorio no debe envenenar para siempre la misma miniatura.
+      if (thumbs.get(key) === t) thumbs.delete(key);
+    });
   }
   return t;
 }

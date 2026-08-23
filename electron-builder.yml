@@ -13,6 +13,7 @@ files:
 # clic derecho → Abrir, o Ajustes del Sistema → Privacidad y seguridad → Abrir igualmente
 mac:
   identity: null
+  icon: resources/icon.png
   category: public.app-category.productivity
   target:
     - target: dmg

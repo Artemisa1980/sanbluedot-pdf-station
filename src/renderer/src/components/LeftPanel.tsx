@@ -681,7 +681,7 @@ function DocStyleControls({
 
 function MyStylesBlock({ doc, style }: { doc: SourceDoc; style: DocStyle }) {
   const { dispatch } = useStation();
-  const { styles, save, remove } = useMyStyles();
+  const { styles, error, save, remove } = useMyStyles();
   const [naming, setNaming] = useState(false);
   const [name, setName] = useState("");
   // Estilo elegido en el desplegable — habilita el ✕ de borrado contextual
@@ -784,6 +784,12 @@ function MyStylesBlock({ doc, style }: { doc: SourceDoc; style: DocStyle }) {
       {styles.length === 0 && !naming && (
         <p className="mt-1 text-[10px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
           Guarda tus combinaciones ganadoras con nombre y reúsalas en cualquier proyecto.
+        </p>
+      )}
+
+      {error && (
+        <p className="mt-1.5 text-[10px]" style={{ color: "var(--danger)" }}>
+          {error}
         </p>
       )}
     </div>

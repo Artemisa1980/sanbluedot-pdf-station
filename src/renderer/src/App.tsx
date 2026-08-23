@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DocEditor, type EditorView } from "./components/DocEditor";
 import { LeftPanel } from "./components/LeftPanel";
 import { Organizer } from "./components/Organizer";
@@ -28,6 +28,10 @@ export default function App() {
   const [readerAt, setReaderAt] = useState<string | null>(null); // abrir lectura en esta página
   const [showPanel, setShowPanel] = useState(true);
   const { project, dirty, dispatch } = useStation();
+  const projectRef = useRef(project);
+  projectRef.current = project;
+  const saveInFlight = useRef(false);
+  const [saving, setSaving] = useState(false);
   // Estilos vivos: recompila solo los docs cuyo estilo cambió, en cualquier vista
   const recompiling = useAutoRecompile((msg) => showToast("error", msg));
   const [currentPath, setCurrentPath] = useState<string | null>(null);
@@ -147,6 +151,10 @@ export default function App() {
   }
 
   function handleNew() {
+    if (saveInFlight.current) {
+      showToast("error", "Espera a que termine el guardado actual.");
+      return;
+    }
     if (dirty && !window.confirm("¿Empezar de cero? Se descartará lo que no hayas guardado.")) return;
     clearCaches();
     dispatch({ type: "newProject" });
@@ -155,23 +163,38 @@ export default function App() {
   }
 
   async function handleSaveProject(saveAs = false) {
+    if (saveInFlight.current) return;
+    saveInFlight.current = true;
+    setSaving(true);
+    const snapshot = projectRef.current;
     try {
       const savedPath = await window.station.saveProjectDialog(
-        serialize(project),
+        serialize(snapshot),
         saveAs ? null : currentPath,
-        project.name
+        snapshot.name
       );
       if (savedPath) {
         setCurrentPath(savedPath);
-        dispatch({ type: "markSaved" });
-        showToast("ok", "Proyecto guardado.");
+        if (projectRef.current === snapshot) {
+          dispatch({ type: "markSaved" });
+          showToast("ok", "Proyecto guardado.");
+        } else {
+          showToast("ok", "Versión guardada; hay cambios posteriores pendientes.");
+        }
       }
     } catch (e) {
       showToast("error", e instanceof Error ? e.message : "Error al guardar el proyecto.");
+    } finally {
+      saveInFlight.current = false;
+      setSaving(false);
     }
   }
 
   async function handleOpenProject() {
+    if (saveInFlight.current) {
+      showToast("error", "Espera a que termine el guardado actual.");
+      return;
+    }
     // Protección de trabajo: abrir encima descarta el proyecto actual
     if (dirty && !window.confirm("Hay cambios sin guardar. ¿Abrir otro proyecto y descartarlos?")) return;
     try {
@@ -214,7 +237,7 @@ export default function App() {
           <img
             src={badgeUrl}
             alt=""
-            className="h-7 w-7 shrink-0 select-none"
+            className="h-10 w-10 shrink-0 select-none"
             draggable={false}
           />
           <span className="brand text-[15px]">
@@ -236,8 +259,13 @@ export default function App() {
             <button className="btn-ghost" onClick={handleOpenProject} title="Abrir proyecto .sbstation (Cmd+O)">
               Abrir
             </button>
-            <button className="btn-ghost" onClick={() => handleSaveProject(false)} title="Guardar proyecto (Cmd+S)">
-              Guardar{dirty ? " •" : ""}
+            <button
+              className="btn-ghost"
+              disabled={saving}
+              onClick={() => handleSaveProject(false)}
+              title="Guardar proyecto (Cmd+S)"
+            >
+              {saving ? "Guardando…" : `Guardar${dirty ? " •" : ""}`}
             </button>
           </div>
         </div>

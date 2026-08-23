@@ -32,7 +32,7 @@ vector output, razor-sharp at any zoom — Adobe-grade selectable text.
   current MD/HTML document straight to PDF from the editor (quick-convert).
 - **Project files**: save everything as `.sbstation` (Cmd+S / Cmd+O) and resume later.
 - **Work protection**: dirty-state tracking, unsaved-changes guards on open/close,
-  and debounced editor sync — nothing lives only in a text box.
+  and immediate editor-to-project sync; only PDF preview compilation is debounced.
 
 The sanblueᵈᵒᵗ signature lives **inside each document's content** (masthead + footer
 in the MD/HTML itself) — the app never injects it.
@@ -55,7 +55,8 @@ Workaround: remove the background on that page, or rotate it from the organizer.
 ```bash
 npm install
 npm run dev        # electron-vite dev --watch (hot reload)
-npm run lint       # tsc --noEmit (web + node) — verification is typecheck + running the app
+npm test           # page-state, project-schema, and vector-export regression gate
+npm run lint       # tsc --noEmit (web + node)
 ```
 
 ## Packaging

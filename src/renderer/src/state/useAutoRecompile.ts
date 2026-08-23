@@ -63,9 +63,9 @@ export function useAutoRecompile(onError: (msg: string) => void): Set<string> {
       return;
     }
     try {
-      const { compiledB64, pageCount } = await compileDoc(doc, proj);
+      const { compiledB64, previousPageCount, pageCount } = await compileDoc(doc, proj);
       if (tokens.current.get(docId) !== token) return; // llegó tarde — hay una más nueva
-      dispatch({ type: "setDocPages", docId, compiledB64, pageCount });
+      dispatch({ type: "setDocPages", docId, compiledB64, previousPageCount, pageCount });
     } catch (e) {
       if (tokens.current.get(docId) === token) {
         onErrorRef.current(

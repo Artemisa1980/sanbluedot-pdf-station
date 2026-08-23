@@ -20,7 +20,8 @@ interface Props {
 /**
  * Editor de contenido propio. La maqueta ES el PDF real: se compila sola tras una
  * pausa de tecleo y se muestra como hojas separadas — cortes de página, numeración
- * y colores idénticos al PDF final. El texto se sincroniza solo al proyecto (debounce).
+ * y colores idénticos al PDF final. El texto se sincroniza al proyecto en cada edición;
+ * solo la maqueta PDF usa debounce porque compilar es la operación costosa.
  */
 export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
   const { project, dispatch } = useStation();
@@ -34,12 +35,7 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
   const [exportFlash, setExportFlash] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
-  const contentRef = useRef(content);
-  contentRef.current = content;
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  // Lo último que el proyecto conoce — evita despachos (y dirty) fantasma sin cambios reales
-  const storedRef = useRef(doc?.content ?? "");
-  storedRef.current = doc?.content ?? storedRef.current;
   const buildToken = useRef(0);
 
   const previewSrcId = `preview:${docId}`;
@@ -73,19 +69,9 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc?.preset, doc?.style, content, project.pageSize, project.margins]);
 
-  // Protección de trabajo: el texto viaja al proyecto con debounce — nada vive solo en el editor
-  useEffect(() => {
-    if (!doc || content === doc.content) return;
-    const t = setTimeout(() => dispatch({ type: "updateDoc", docId, patch: { content } }), 400);
-    return () => clearTimeout(t);
-  }, [content, doc, docId, dispatch]);
-
-  // Flush + limpieza de la maqueta efímera al desmontar
+  // Limpieza de la maqueta efímera al desmontar
   useEffect(() => {
     return () => {
-      if (contentRef.current !== storedRef.current) {
-        dispatch({ type: "updateDoc", docId, patch: { content: contentRef.current } });
-      }
       evictSource(`preview:${docId}`);
       evictBytes(`preview:${docId}`);
     };
@@ -102,14 +88,19 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
     setTimeout(() => setSavedFlash(false), 1500);
   }
 
+  function updateContent(next: string) {
+    setContent(next);
+    dispatch({ type: "updateDoc", docId, patch: { content: next } });
+  }
+
   async function handleCompile() {
     if (!doc) return;
     dispatch({ type: "updateDoc", docId, patch: { content } });
     setCompiling(true);
     setError(null);
     try {
-      const { compiledB64, pageCount } = await compileDoc({ ...doc, content }, project);
-      dispatch({ type: "setDocPages", docId, compiledB64, pageCount });
+      const { compiledB64, previousPageCount, pageCount } = await compileDoc({ ...doc, content }, project);
+      dispatch({ type: "setDocPages", docId, compiledB64, previousPageCount, pageCount });
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error desconocido al compilar.");
@@ -129,15 +120,16 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
       )
       .join("\n\n");
     const ta = textareaRef.current;
-    setContent((prev) => {
-      if (!ta) return prev ? `${prev.replace(/\n*$/, "")}\n\n${snippet}\n` : `${snippet}\n`;
-      const start = ta.selectionStart ?? prev.length;
+    const next = (() => {
+      if (!ta) return content ? `${content.replace(/\n*$/, "")}\n\n${snippet}\n` : `${snippet}\n`;
+      const start = ta.selectionStart ?? content.length;
       const end = ta.selectionEnd ?? start;
-      const before = prev.slice(0, start);
-      const after = prev.slice(end);
+      const before = content.slice(0, start);
+      const after = content.slice(end);
       const pad = before && !before.endsWith("\n\n") ? (before.endsWith("\n") ? "\n" : "\n\n") : "";
       return `${before}${pad}${snippet}\n\n${after}`;
-    });
+    })();
+    updateContent(next);
     ta?.focus();
   }
 
@@ -189,7 +181,7 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
         color: "var(--text)"
       }}
       value={content}
-      onChange={(e) => setContent(e.target.value)}
+      onChange={(e) => updateContent(e.target.value)}
       spellCheck={false}
       placeholder={doc.kind === "md" ? "# Escribe tu Markdown aquí…" : "<h1>Escribe tu HTML aquí…</h1>"}
     />
