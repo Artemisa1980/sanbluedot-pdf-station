@@ -102,8 +102,7 @@ export function Organizer({ openAt, onOpenConsumed }: Props) {
 
   const btn = (label: string, title: string, onClick: () => void, danger = false) => (
     <button
-      className="btn-ghost"
-      style={danger ? { borderColor: "var(--danger)", color: "var(--danger)", background: "var(--danger-soft)" } : undefined}
+      className={`btn-ghost${danger ? " btn-danger" : ""}`}
       title={title}
       disabled={selection.length === 0}
       onClick={onClick}
@@ -153,12 +152,13 @@ export function Organizer({ openAt, onOpenConsumed }: Props) {
         <div className="min-h-0 flex-1 overflow-auto p-4">
           {pages.length === 0 ? (
             <div
-              className="flex h-full items-center justify-center rounded-lg border-2 border-dashed"
+              className="empty-canvas flex h-full items-center justify-center rounded-lg border-2 border-dashed"
               style={{ borderColor: "var(--border)" }}
             >
-              <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-                El documento está vacío — arrastra un PDF, Markdown o HTML al panel de la izquierda.
-              </p>
+              <div className="empty-canvas-copy">
+                <strong>El documento está vacío</strong>
+                <span>Arrastra un PDF, Markdown o HTML al panel de la izquierda.</span>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">

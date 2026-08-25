@@ -83,7 +83,7 @@ export function PageCard({
         {page.patches.length > 0 && (
           <span
             className="shrink-0 text-[9px]"
-            style={{ fontFamily: "var(--mono)", color: "var(--accent)" }}
+            style={{ fontFamily: "var(--mono)", color: "var(--text)" }}
             title={`${page.patches.length} parche(s)`}
           >
             ◧{page.patches.length}

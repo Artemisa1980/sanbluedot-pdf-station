@@ -72,8 +72,7 @@ export function DraftsModal({ onClose }: { onClose: () => void }) {
                 </div>
               </div>
               <button
-                className="btn-ghost shrink-0"
-                style={{ color: "var(--danger)" }}
+                className="btn-ghost btn-danger shrink-0"
                 onClick={handleDelete}
               >
                 Borrar

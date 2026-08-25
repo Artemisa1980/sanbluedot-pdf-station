@@ -178,8 +178,7 @@ export function PatchEditor({ page, bytes, initial, onSave, onDelete, onClose }:
           <div className="mt-auto flex flex-col gap-2">
             {initial && (
               <button
-                className="btn-ghost"
-                style={{ borderColor: "var(--danger)", color: "var(--danger)" }}
+                className="btn-ghost btn-danger"
                 onClick={() => {
                   onDelete(initial.id);
                   onClose();
@@ -193,7 +192,7 @@ export function PatchEditor({ page, bytes, initial, onSave, onDelete, onClose }:
                 Cancelar
               </button>
               <button
-                className="btn-ghost flex-1"
+                className="btn-ghost btn-soft flex-1"
                 style={{ borderColor: "var(--accent)", background: "var(--accent-soft)" }}
                 disabled={!canSave}
                 onClick={() => {

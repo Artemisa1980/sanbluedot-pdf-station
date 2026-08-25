@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import "@fontsource/fira-code/400.css";
 import "@fontsource/fira-code/500.css";
 import "@fontsource/fira-code/700.css";
+import "@fontsource/press-start-2p/400.css";
 import "@fontsource/outfit/400.css";
 import "@fontsource/outfit/600.css";
 import "@fontsource/instrument-serif/400.css";

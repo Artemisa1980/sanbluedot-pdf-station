@@ -226,7 +226,7 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, recompiling }: P
           <select
             id="lp-pageSize"
             className="btn-ghost"
-            style={{ background: "var(--input-bg)" }}
+            style={{ background: "var(--control-bg)" }}
             value={project.pageSize}
             onChange={(e) => dispatch({ type: "setPageSize", value: e.target.value as PageSize })}
           >
@@ -241,7 +241,7 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, recompiling }: P
           <select
             id="lp-margins"
             className="btn-ghost"
-            style={{ background: "var(--input-bg)" }}
+            style={{ background: "var(--control-bg)" }}
             value={project.margins}
             onChange={(e) => dispatch({ type: "setMargins", value: e.target.value as MarginPreset })}
           >
@@ -377,7 +377,7 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, recompiling }: P
         <div className="mb-2 flex items-center justify-between">
           <div className="section-label">Control estético</div>
           {activeDoc && recompiling.has(activeDoc.id) && (
-            <span className="text-[10px]" style={{ fontFamily: "var(--mono)", color: "var(--accent)" }}>
+            <span className="text-[10px]" style={{ fontFamily: "var(--mono)", color: "var(--text)" }}>
               ◌ aplicando…
             </span>
           )}
@@ -402,7 +402,7 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, recompiling }: P
                 ))}
                 <label
                   className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border-2 text-[11px]"
-                  style={{ borderColor: "var(--accent)", color: "var(--accent)" }}
+                  style={{ borderColor: "var(--accent)", color: "var(--text)" }}
                   title="Color personalizado"
                 >
                   ✎
@@ -456,7 +456,7 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, recompiling }: P
                   </ul>
                 )}
                 <button
-                  className="btn-ghost mt-2 w-full"
+                  className="btn-ghost btn-soft mt-2 w-full"
                   style={{ borderColor: "var(--accent)", background: "var(--accent-soft)" }}
                   onClick={() => setPatchTarget({ pageId: singlePdfPage.id, patch: null })}
                 >
@@ -567,7 +567,7 @@ function DocStyleControls({
         <select
           id="doc-preset"
           className="btn-ghost mt-1 w-full"
-          style={{ background: "var(--input-bg)" }}
+          style={{ background: "var(--control-bg)" }}
           value={doc.preset}
           onChange={(e) =>
             dispatch({
@@ -597,7 +597,7 @@ function DocStyleControls({
         <select
           id="doc-font"
           className="btn-ghost mt-1 w-full"
-          style={{ background: "var(--input-bg)" }}
+          style={{ background: "var(--control-bg)" }}
           value={style.fontId}
           onChange={(e) => onPatch(doc, { fontId: e.target.value })}
         >
@@ -729,7 +729,7 @@ function MyStylesBlock({ doc, style }: { doc: SourceDoc; style: DocStyle }) {
           {/* Desplegable: elegir = aplicar. Una sola línea aunque tengas muchos estilos. */}
           <select
             className="btn-ghost min-w-0 flex-1"
-            style={{ background: "var(--input-bg)" }}
+            style={{ background: "var(--control-bg)" }}
             value={selectedId}
             onChange={(e) => choose(e.target.value)}
           >

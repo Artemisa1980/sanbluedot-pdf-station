@@ -218,7 +218,7 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
           ).map(([mode, icon, title]) => (
             <button
               key={mode}
-              className="btn-ghost"
+              className={`btn-ghost${view === mode ? " btn-soft" : ""}`}
               style={view === mode ? { borderColor: "var(--accent)", background: "var(--accent-soft)" } : undefined}
               title={title}
               onClick={() => onViewChange(mode)}
@@ -251,7 +251,7 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
 
         <button
           className="btn-ghost tip whitespace-nowrap"
-          style={exportFlash ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}
+          style={exportFlash ? { borderColor: "var(--accent)", color: "var(--text)" } : undefined}
           disabled={exportingDoc}
           onClick={handleExportDoc}
           data-tip="Convertir SOLO este documento a PDF (no toca el proyecto)"
@@ -260,7 +260,7 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
         </button>
 
         <button
-          className="btn-ghost whitespace-nowrap"
+          className="btn-ghost btn-soft whitespace-nowrap"
           style={{ borderColor: "var(--accent)", background: "var(--accent-soft)", fontWeight: 700 }}
           disabled={compiling}
           onClick={handleCompile}
@@ -303,7 +303,7 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
               <span className="section-label truncate">✎ Fuente: {doc.name}</span>
               <button
                 className="btn-ghost"
-                style={savedFlash ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}
+                style={savedFlash ? { borderColor: "var(--accent)", color: "var(--text)" } : undefined}
                 onClick={saveContent}
                 title="Guardar el texto en el proyecto (también se guarda solo)"
               >
@@ -324,7 +324,7 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
               <span className="section-label truncate">✎ Fuente: {doc.name}</span>
               <button
                 className="btn-ghost"
-                style={savedFlash ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}
+                style={savedFlash ? { borderColor: "var(--accent)", color: "var(--text)" } : undefined}
                 onClick={saveContent}
                 title="Guardar el texto en el proyecto (también se guarda solo)"
               >

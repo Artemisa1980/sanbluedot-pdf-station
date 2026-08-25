@@ -12,6 +12,8 @@ import { useDraftAutosave } from "./state/useDraftAutosave";
 import { bytesToB64 } from "../../shared/b64";
 import badgeUrl from "./assets/sanblue-badge.png";
 
+declare const __APP_VERSION__: string;
+
 function useTheme() {
   const [dark, setDark] = useState(() => localStorage.getItem("station-theme") === "dark");
   useEffect(() => {
@@ -229,38 +231,45 @@ export default function App() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
-      <header
-        className="flex h-[52px] shrink-0 items-center justify-between border-b px-4"
-        style={{ background: "var(--panel-bg)", borderColor: "var(--border)" }}
-      >
-        <div className="flex items-center gap-2.5">
+      <header className="app-header">
+        <div className="app-identity">
           <img
             src={badgeUrl}
             alt=""
-            className="h-10 w-10 shrink-0 select-none"
+            className="app-logo"
             draggable={false}
           />
-          <span className="brand text-[15px]">
-            sanblue<sup>dot</sup>
-          </span>
-          {/* Un click abre, un click cierra — todo vive en el panel izquierdo */}
-          <button
-            className="btn-ghost"
-            onClick={() => setShowPanel((v) => !v)}
-            title={showPanel ? "Cerrar panel" : "Abrir panel"}
-          >
-            {showPanel ? "‹" : "›"}
-          </button>
-          <span className="section-label hidden md:inline">retro pdf-station</span>
-          <div className="ml-2 flex gap-1.5">
-            <button className="btn-ghost" onClick={handleNew} title="Proyecto nuevo (empezar de cero)">
+          <div className="app-identity-copy">
+            <div className="app-identity-title">
+              <span>SANDY.SYSDEV</span>
+              <span className="app-version">v{__APP_VERSION__}</span>
+            </div>
+            <span className="brand app-wordmark">
+              sanblue<sup>dot</sup>
+            </span>
+          </div>
+        </div>
+
+        {/* Un click abre, un click cierra — todo vive en el panel izquierdo */}
+        <button
+          className="btn-ghost header-secondary panel-toggle"
+          onClick={() => setShowPanel((v) => !v)}
+          title={showPanel ? "Cerrar panel" : "Abrir panel"}
+        >
+          {showPanel ? "‹" : "›"}
+        </button>
+        <span className="app-product-name">retro pdf-station</span>
+
+        <div className="app-header-actions">
+          <div className="project-actions">
+            <button className="btn-ghost header-secondary" onClick={handleNew} title="Proyecto nuevo (empezar de cero)">
               Nuevo
             </button>
-            <button className="btn-ghost" onClick={handleOpenProject} title="Abrir proyecto .sbstation (Cmd+O)">
+            <button className="btn-ghost header-secondary" onClick={handleOpenProject} title="Abrir proyecto .sbstation (Cmd+O)">
               Abrir
             </button>
             <button
-              className="btn-ghost"
+              className="btn-ghost header-secondary"
               disabled={saving}
               onClick={() => handleSaveProject(false)}
               title="Guardar proyecto (Cmd+S)"
@@ -268,11 +277,9 @@ export default function App() {
               {saving ? "Guardando…" : `Guardar${dirty ? " •" : ""}`}
             </button>
           </div>
-        </div>
-        <div className="flex items-center gap-1.5">
+          <span className="header-action-separator" aria-hidden="true" />
           <button
-            className="btn-ghost"
-            style={{ borderColor: "var(--accent)", background: "var(--accent-soft)", fontWeight: 700 }}
+            className="btn-ghost export-button"
             disabled={exporting || project.pages.length === 0 || recompiling.size > 0}
             onClick={handleExport}
             title={
@@ -283,7 +290,7 @@ export default function App() {
           >
             {exporting ? "Exportando…" : recompiling.size > 0 ? "◌ Aplicando estilo…" : "⚡ EXPORTAR PDF"}
           </button>
-          <button className="btn-ghost" onClick={toggle} title="Cambiar tema">
+          <button className="btn-ghost header-secondary" onClick={toggle} title="Cambiar tema">
             {dark ? "◑" : "◐"}
           </button>
         </div>
@@ -313,9 +320,15 @@ export default function App() {
         )}
       </main>
 
+      <footer className="app-footer">
+        <span>
+          <strong>sanblue<sup>dot</sup></strong> — retro dev-station
+        </span>
+      </footer>
+
       {toast && (
         <div
-          className="card-retro fixed right-4 bottom-4 z-50 max-w-[360px] px-4 py-3 text-[12px]"
+          className="card-retro fixed right-4 bottom-14 z-50 max-w-[360px] px-4 py-3 text-[12px]"
           style={{
             fontFamily: "var(--mono)",
             color: toast.kind === "error" ? "var(--danger)" : "var(--text)",

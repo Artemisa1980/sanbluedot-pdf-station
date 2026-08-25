@@ -5,14 +5,14 @@
    ═══════════════════════════════════ */
 :root {
   /* UI Chrome — Claro (default) */
-  --app-bg: #eef2ef;
-  --panel-bg: #ffffff;
-  --panel-header: #f3f6f4;
-  --border: rgba(45, 53, 48, 0.12);
+  --app-bg: #b7c6a8;
+  --panel-bg: #f8eccf;
+  --panel-header: #98aab2;
+  --border: #16213e;
   --border-hover: #7cb3e8;
-  --text: #2d3530;
-  --text-muted: #6b7c6e;
-  --text-label: #4a5650;
+  --text: #16213e;
+  --text-muted: #405147;
+  --text-label: #16213e;
   --accent: #7cb3e8; /* dot blue — SIEMPRE */
   --accent-soft: rgba(124, 179, 232, 0.12);
   --accent-hover: #93c4f0;
@@ -20,21 +20,27 @@
   --navy: #16213e;
   --danger: #c0392b;
   --danger-soft: rgba(192, 57, 43, 0.08);
-  --input-bg: #f7f9f7;
+  --input-bg: #fff9e9;
+  --control-bg: #906961;
+  --control-text: #fff7ef;
+  --control-danger-bg: #8a615a;
+  --control-danger-text: #fff7ef;
+  --dropzone-bg: #dce6d6;
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
   --radius: 8px;
   --radius-sm: 5px;
-  --scrollbar: rgba(45, 53, 48, 0.25);
+  --scrollbar: rgba(22, 33, 62, 0.35);
   /* Retro dev-station: bordes marcados + sombra dura (referencias de Sandy 2026-07-02) */
-  --border-strong: #39423c;
-  --shadow-ink: rgba(45, 53, 48, 0.32);
+  --border-strong: #16213e;
+  --shadow-ink: #a87f76;
   --retro-sm: 2px 2px 0 var(--shadow-ink);
   --retro-md: 3px 3px 0 var(--shadow-ink);
 
   /* Fuentes de marca */
   --mono: "Fira Code", Menlo, Consolas, monospace;
+  --pixel: "Press Start 2P", "Fira Code", monospace;
   --serif: "Instrument Serif", Georgia, serif;
   --sans: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
@@ -50,6 +56,13 @@
   --text-label: #9aaa9e;
   --accent-soft: rgba(124, 179, 232, 0.1);
   --input-bg: #222b25;
+  --control-bg: #1a211d;
+  --control-text: #9aaa9e;
+  --control-danger-bg: rgba(192, 57, 43, 0.08);
+  --control-danger-text: #c0392b;
+  --dropzone-bg: #222b25;
+  --danger: #c0392b;
+  --danger-soft: rgba(192, 57, 43, 0.08);
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.25);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.35);
@@ -84,6 +97,93 @@ body {
 .dark .brand { color: var(--gold); }
 .brand sup { color: var(--accent); font-weight: 700; font-size: 0.6em; vertical-align: super; }
 
+/* Header de producto: identidad a la izquierda, acciones juntas a la derecha. */
+.app-header {
+  min-height: 72px;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 2px solid var(--gold);
+  background: var(--navy);
+}
+.app-identity { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.app-logo { width: 48px; height: 48px; flex: 0 0 48px; user-select: none; }
+.app-identity-copy { display: grid; gap: 5px; min-width: 176px; }
+.app-identity-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #f8eccf;
+  font-family: var(--pixel);
+  font-size: 12px;
+  line-height: 1.15;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.app-version {
+  padding: 5px 7px;
+  border-radius: 7px;
+  background: var(--gold);
+  color: var(--navy);
+  font-size: 8px;
+  line-height: 1;
+}
+.app-header .app-wordmark { color: var(--gold); font-size: 12px; }
+.app-product-name {
+  color: #f8eccf;
+  font-family: var(--pixel);
+  font-size: 9px;
+  line-height: 1.35;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.app-header-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.project-actions { display: flex; align-items: center; gap: 6px; }
+.header-action-separator { width: 1px; height: 34px; background: rgba(248, 236, 207, 0.38); }
+.app-header .btn-ghost.header-secondary {
+  background: #f4e3bc;
+  color: var(--navy);
+  border-color: var(--navy);
+}
+.app-header .export-button {
+  background: var(--gold);
+  color: var(--navy);
+  border-color: var(--navy);
+  font-weight: 700;
+}
+.app-header .btn-ghost:hover:not(:disabled) { color: var(--navy); }
+.panel-toggle { min-width: 36px; }
+.dark .app-header { background: var(--navy); border-bottom-color: rgba(124, 179, 232, 0.45); }
+.dark .app-header .btn-ghost.header-secondary {
+  background: var(--panel-bg);
+  color: var(--text-label);
+  border-color: var(--border-strong);
+}
+.dark .app-header .export-button {
+  background: var(--accent-soft);
+  color: var(--text-label);
+  border-color: var(--accent);
+}
+.dark .app-header .btn-ghost:hover:not(:disabled) { color: var(--text); }
+
+.app-footer {
+  min-height: 40px;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-top: 2px solid var(--gold);
+  background: var(--navy);
+  color: #aab1c1;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+}
+.app-footer strong { color: var(--gold); }
+.app-footer sup { color: var(--accent); font-size: 0.62em; vertical-align: super; }
+
 .section-label {
   font-family: var(--mono);
   text-transform: uppercase;
@@ -96,18 +196,18 @@ body {
 .btn-ghost {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--text-label);
+  color: var(--control-text);
   border: 1.5px solid var(--border-strong);
   border-radius: 7px;
   padding: 4px 11px;
-  background: var(--panel-bg);
+  background: var(--control-bg);
   cursor: pointer;
   box-shadow: var(--retro-sm);
   transition: border-color 0.15s, color 0.15s, box-shadow 0.15s, transform 0.15s, background-color 0.15s;
 }
 .btn-ghost:hover:not(:disabled) {
   border-color: var(--accent);
-  color: var(--text);
+  color: var(--control-text);
   transform: translate(-1px, -1px);
   box-shadow: 3px 3px 0 var(--shadow-ink);
 }
@@ -116,6 +216,10 @@ body {
   box-shadow: 0 0 0 var(--shadow-ink);
 }
 .btn-ghost:disabled { opacity: 0.45; cursor: default; box-shadow: none; }
+.btn-soft { color: var(--text); }
+.btn-soft:hover:not(:disabled) { color: var(--text); }
+.btn-danger { background: var(--control-danger-bg); color: var(--control-danger-text); }
+.btn-danger:hover:not(:disabled) { color: var(--control-danger-text); }
 
 /* Tooltip propio (reemplaza el `title` nativo de Chromium, que en macOS puede quedar
    flotando "pegado" sobre el documento): solo existe mientras el puntero está sobre el botón */
@@ -186,7 +290,7 @@ body {
 .dropzone {
   border: 2px dashed var(--border-strong);
   border-radius: 10px;
-  background: var(--input-bg);
+  background: var(--dropzone-bg);
   cursor: pointer;
   transition: border-color 0.15s, background-color 0.15s;
 }
@@ -216,4 +320,24 @@ body {
   background: #ffffff;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.16), 0 0 0 1px rgba(0, 0, 0, 0.05);
   border-radius: 2px;
+}
+
+.empty-canvas { background: #f6f1df; }
+.empty-canvas-copy { display: grid; gap: 8px; padding: 24px; text-align: center; }
+.empty-canvas-copy strong { font-family: var(--mono); font-size: 13px; color: var(--text); }
+.empty-canvas-copy span { font-size: 12px; color: var(--text-muted); }
+.dark .empty-canvas { background: var(--app-bg); }
+
+@media (max-width: 1120px) {
+  .app-logo { width: 40px; height: 40px; flex-basis: 40px; }
+  .app-identity-copy { min-width: 142px; }
+  .app-identity-title { font-size: 10px; }
+  .app-product-name { font-size: 8px; }
+  .app-header .btn-ghost { padding-inline: 8px; }
+}
+
+@media (max-width: 900px) {
+  .app-product-name,
+  .header-action-separator { display: none; }
+  .app-identity-copy { min-width: 0; }
 }
