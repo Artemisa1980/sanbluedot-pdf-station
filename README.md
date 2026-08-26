@@ -1,4 +1,4 @@
-# sanblueᵈᵒᵗ pdf-station
+# SANDY.SYSDEV v1.9.0 — retro pdf-station
 
 **retro pdf-station** — a personal desktop PDF studio, built by Sandy E. Quintero.
 Cross-platform app (Mac + Windows, single codebase) to compose, style and export PDF
