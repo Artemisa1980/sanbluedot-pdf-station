@@ -623,7 +623,11 @@ function DocStyleControls({
             className="mt-1 w-full rounded border px-2 py-1 text-[12px]"
             style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
             value={style.fontSizePt}
-            onChange={(e) => onPatch(doc, { fontSizePt: Number(e.target.value) || 9.5 })}
+            onChange={(e) => {
+              // Solo valores positivos: un tamaño ≤ 0 hacía que el .sbstation guardado no se pudiera reabrir
+              const v = Number(e.target.value);
+              if (Number.isFinite(v) && v > 0) onPatch(doc, { fontSizePt: v });
+            }}
           />
         </div>
         <div className="flex-1">
@@ -639,7 +643,10 @@ function DocStyleControls({
             className="mt-1 w-full rounded border px-2 py-1 text-[12px]"
             style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
             value={style.lineHeight}
-            onChange={(e) => onPatch(doc, { lineHeight: Number(e.target.value) || 1.4 })}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (Number.isFinite(v) && v > 0) onPatch(doc, { lineHeight: v });
+            }}
           />
         </div>
       </div>

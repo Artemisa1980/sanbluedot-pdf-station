@@ -170,7 +170,11 @@ export function PatchEditor({ page, bytes, initial, onSave, onDelete, onClose }:
                 className="w-full rounded border px-2 py-1 text-[12px]"
                 style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
                 value={fontSize}
-                onChange={(e) => setFontSize(Number(e.target.value) || 11)}
+                onChange={(e) => {
+                  // Un tamaño ≤ 0 dejaba el proyecto guardado imposible de reabrir
+                  const v = Number(e.target.value);
+                  if (Number.isFinite(v) && v > 0) setFontSize(v);
+                }}
               />
             </div>
           </div>
