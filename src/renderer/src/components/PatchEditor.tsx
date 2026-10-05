@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { newId } from "../state/store";
 import { getPageSizePt, renderPageDataUrl } from "../engine/thumbnails";
+import { unsupportedPatchChars } from "../engine/exportProject";
 import type { PageRef, Patch } from "../../../shared/types";
 
 const PREVIEW_W = 640;
@@ -73,7 +74,9 @@ export function PatchEditor({ page, bytes, initial, onSave, onDelete, onClose }:
 
   // Escala exacta pt→px para que el texto del overlay mida lo que medirá en el PDF
   const fontPx = pagePt ? fontSize * (PREVIEW_W / pagePt.width) : fontSize;
-  const canSave = rect !== null;
+  // El PDF dibuja el texto del parche con Helvetica estándar: avisar antes de guardar lo que no puede dibujar
+  const badChars = unsupportedPatchChars(text);
+  const canSave = rect !== null && badChars.length === 0;
 
   return createPortal(
     <div
@@ -155,6 +158,12 @@ export function PatchEditor({ page, bytes, initial, onSave, onDelete, onClose }:
             onChange={(e) => setText(e.target.value)}
             placeholder="Texto de corrección…"
           />
+          {badChars.length > 0 && (
+            <p className="text-[11px]" style={{ color: "var(--danger)" }}>
+              El PDF no puede dibujar {badChars.join(" ")} en un parche. Cámbialo por texto: por ejemplo «-&gt;» en vez
+              de «→». Las tildes, la ñ, ¿¡ y € sí funcionan.
+            </p>
+          )}
 
           <div className="flex items-center gap-2">
             <div className="flex-1">

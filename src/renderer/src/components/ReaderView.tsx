@@ -127,6 +127,7 @@ export function ReaderView({ initialId, onClose }: { initialId: string; onClose:
                 pageIndex={p.pageIndex}
                 rotation={p.rotation}
                 background={effectiveBackground(project, p)}
+                tint={Boolean(p.tint)}
                 width={104}
               />
               <div className="text-[9px]" style={{ fontFamily: "var(--mono)", color: "var(--text-muted)" }}>
@@ -223,6 +224,8 @@ function ReaderPage({
   const bytes = src?.bytes ?? null;
   const rotated = page.rotation === 90 || page.rotation === 270;
   const background = effectiveBackground(project, page);
+  // Teñir la hoja: página normal y el color encima en modo multiplicar (igual que la exportación)
+  const tinted = Boolean(page.tint) && background !== null;
 
   // Dimensiones reales de la página (en puntos) para reservar el espacio exacto
   useEffect(() => {
@@ -257,7 +260,7 @@ function ReaderPage({
       bytes,
       page.pageIndex,
       rotated ? Math.round(width / ratio) : width,
-      background !== null
+      background !== null && !tinted
     )
       .then((u) => alive && setUrl(u))
       .catch(() => {});
@@ -265,7 +268,7 @@ function ReaderPage({
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [near, bytes, page.srcId, page.pageIndex, width, ratio, page.rotation, background]);
+  }, [near, bytes, page.srcId, page.pageIndex, width, ratio, page.rotation, background, tinted]);
 
   const h = Math.round(rotated ? width / ratio : width * ratio);
   const imgW = rotated ? h : width;
@@ -275,7 +278,7 @@ function ReaderPage({
     <div
       ref={ref}
       className="sheet relative overflow-hidden"
-      style={{ width, height: h, background: background ?? "#ffffff" }}
+      style={{ width, height: h, background: tinted ? "#ffffff" : (background ?? "#ffffff"), isolation: "isolate" }}
     >
       {url && (
         <img
@@ -289,6 +292,9 @@ function ReaderPage({
             transform: `translate(-50%,-50%) rotate(${page.rotation}deg)`
           }}
         />
+      )}
+      {tinted && url && (
+        <div className="pointer-events-none absolute inset-0" style={{ background: background!, mixBlendMode: "multiply" }} />
       )}
     </div>
   );

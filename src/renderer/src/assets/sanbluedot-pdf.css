@@ -18,7 +18,8 @@
   --inline-bg: #eef2f8;
 
   --serif: "Charter", "Bitstream Charter", "Sitka Text", Georgia, "Times New Roman", serif;
-  --mono:  "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, "Courier New", monospace;
+  /* Fira Code completa va incrustada en cada compilación: letras, cajas ─│, flechas → y ≠ √ en una sola fuente */
+  --mono:  "Fira Code", Menlo, Consolas, "Courier New", monospace;
 }
 
 /* ---------- Base / tipografía (cuerpo académico) ---------- */
@@ -74,6 +75,7 @@ h4 { font-size: 10pt; color: var(--muted); text-transform: uppercase; letter-spa
 
 /* ---------- Listas ---------- */
 ul, ol { padding-left: 1.4rem; margin: 0 0 0.6rem; }
+ol { padding-left: 2rem; } /* espacio para números de dos dígitos: el 10 no se corta */
 li { margin: 0.16rem 0; }
 
 /* ---------- Citas ---------- */

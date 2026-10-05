@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { newId } from "./store";
+import { isDocStyle } from "../engine/projectFile";
 import type { CustomStylePreset, DocStyle } from "../../../shared/types";
+
+function isCustomStylePreset(value: unknown): value is CustomStylePreset {
+  if (value === null || typeof value !== "object") return false;
+  const s = value as Record<string, unknown>;
+  return typeof s.id === "string" && typeof s.label === "string" && typeof s.baseId === "string" && isDocStyle(s.style);
+}
 
 /**
  * "Mis estilos" (v1.6, pedido de Sandy): sus combinaciones ganadoras con nombre,
@@ -18,7 +25,8 @@ export function useMyStyles() {
     window.station
       .myStylesRead()
       .then((saved) => {
-        setStyles(saved);
+        // Un my-styles.json dañado no debe colar un estilo inválido en un documento
+        setStyles(saved.filter(isCustomStylePreset));
         setError(null);
       })
       .catch(() => {

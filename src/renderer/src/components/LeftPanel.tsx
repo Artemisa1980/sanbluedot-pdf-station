@@ -9,7 +9,9 @@ import { useMyStyles } from "../state/useMyStyles";
 import { DraftsModal } from "./DraftsModal";
 import { PagePicker } from "./PagePicker";
 import { PatchEditor } from "./PatchEditor";
-import { bytesToB64 } from "../../../shared/b64";
+import { pdfImportProblem } from "../engine/exportProject";
+import { isDarkPaper } from "../engine/compile";
+import { b64ToBytes, bytesToB64 } from "../../../shared/b64";
 import type {
   CustomStylePreset,
   DocStyle,
@@ -44,11 +46,21 @@ Escribe aquí. **Negritas**, *cursivas*, listas:
 </div>
 `;
 
+// Atajos de fondo para páginas PDF: neutros, la paleta sanblueᵈᵒᵗ y los papeles de los presets.
+// Cualquier otro color sale del ✎.
 const SWATCHES: Array<{ label: string; color: string }> = [
   { label: "Blanco", color: "#ffffff" },
+  { label: "Perla", color: "#eef1f6" },
   { label: "Crema", color: "#fbf9f3" },
+  { label: "Papel de máquina", color: "#f3ebd8" },
+  { label: "Dorado suave", color: "#fbf0d2" },
+  { label: "Salvia", color: "#e9eedf" },
   { label: "Sage", color: "#e4ebe6" },
-  { label: "Navy", color: "#16213e" }
+  { label: "Cielo", color: "#e3effa" },
+  { label: "Rosa viejo", color: "#f4e4e1" },
+  { label: "Navy", color: "#16213e" },
+  { label: "Verde bosque", color: "#1f3326" },
+  { label: "Carbón", color: "#17130e" }
 ];
 
 interface Props {
@@ -56,12 +68,14 @@ interface Props {
   onOpenDoc: (docId: string, view?: "editor" | "preview") => void;
   /** Click en un PDF de la cola → vista lectura en esa página */
   onOpenPdf: (pageId: string) => void;
-  /** Docs recompilándose en segundo plano (estilo recién cambiado) */
+  /** Aviso de error para el usuario (PDF protegido o dañado al importar) */
+  onError: (msg: string) => void;
+  /** Docs recompilándose en segundo plano (texto o estilo recién cambiado) */
   recompiling: Set<string>;
 }
 
 /** Panel izquierdo único: proyecto + cola de documentos + control estético. */
-export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, recompiling }: Props) {
+export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, onError, recompiling }: Props) {
   const { project, selection, dispatch } = useStation();
   const [queue, setQueue] = useState<ImportedPdf[]>([]);
   const [dragOver, setDragOver] = useState(false);
@@ -84,12 +98,22 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, recompiling }: P
     return doc.id;
   }
 
+  /** Un PDF protegido o dañado se avisa al importarlo, no al final con la exportación fallida. */
+  async function queuePdf(name: string, bytes: Uint8Array, bytesB64: string) {
+    const problem = await pdfImportProblem(bytes);
+    if (problem) {
+      onError(`"${name}" ${problem}`);
+      return;
+    }
+    setQueue((q) => [...q, { id: newId(), name, bytesB64 }]);
+  }
+
   async function handlePick() {
     const files = await window.station.importFilesDialog();
     let firstDoc: string | null = null;
     for (const f of files) {
       if (f.kind === "pdf") {
-        setQueue((q) => [...q, { id: newId(), name: f.name, bytesB64: f.bytesB64 }]);
+        await queuePdf(f.name, b64ToBytes(f.bytesB64), f.bytesB64);
       } else {
         const id = addDocFromFile(f.name, f.kind, f.content);
         if (!firstDoc) firstDoc = id;
@@ -105,7 +129,7 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, recompiling }: P
     for (const file of Array.from(e.dataTransfer.files)) {
       if (/\.pdf$/i.test(file.name)) {
         const bytes = new Uint8Array(await file.arrayBuffer());
-        setQueue((q) => [...q, { id: newId(), name: file.name, bytesB64: bytesToB64(bytes) }]);
+        await queuePdf(file.name, bytes, bytesToB64(bytes));
       } else if (/\.(md|markdown|html?|htm)$/i.test(file.name)) {
         const kind = /\.(html?|htm)$/i.test(file.name) ? "html" : "md";
         const id = addDocFromFile(file.name, kind, await file.text());
@@ -189,6 +213,11 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, recompiling }: P
   const singlePdfPage =
     selectedPages.length === 1 && selectedPages[0].srcKind === "pdf" ? selectedPages[0] : null;
   const pdfSelection = selectedPages.length > 0 && selectedPages.every((p) => p.srcKind === "pdf");
+  // Fondo común de la selección: color, null (sin fondo) o undefined (fondos distintos)
+  const sharedBg = selectedPages.every((p) => p.background === selectedPages[0]?.background)
+    ? (selectedPages[0]?.background ?? null)
+    : undefined;
+  const sharedTint = selectedPages.length > 0 && selectedPages.every((p) => p.tint === true);
 
   // Doc activo: el abierto en el editor, o el de la página seleccionada
   const activeDocId =
@@ -317,7 +346,7 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, recompiling }: P
                   <span
                     className="shrink-0 text-[9px]"
                     style={{ fontFamily: "var(--mono)", color: "var(--text-muted)" }}
-                    title={recompiling.has(s.id) ? "Aplicando el estilo nuevo…" : undefined}
+                    title={recompiling.has(s.id) ? "Actualizando el documento…" : undefined}
                   >
                     {recompiling.has(s.id) ? "◌" : inUse}
                   </span>
@@ -378,7 +407,7 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, recompiling }: P
           <div className="section-label">Control estético</div>
           {activeDoc && recompiling.has(activeDoc.id) && (
             <span className="text-[10px]" style={{ fontFamily: "var(--mono)", color: "var(--text)" }}>
-              ◌ aplicando…
+              ◌ actualizando…
             </span>
           )}
         </div>
@@ -395,7 +424,11 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, recompiling }: P
                   <button
                     key={s.color}
                     className="h-8 w-8 rounded-md border-2 transition-transform hover:scale-110"
-                    style={{ background: s.color, borderColor: "var(--border-strong)" }}
+                    style={{
+                      background: s.color,
+                      borderColor: s.color === sharedBg ? "var(--accent)" : "var(--border-strong)",
+                      boxShadow: s.color === sharedBg ? "0 0 0 2px var(--accent)" : undefined
+                    }}
                     title={s.label}
                     onClick={() => dispatch({ type: "setBackground", ids: selection, color: s.color })}
                   />
@@ -409,10 +442,31 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, recompiling }: P
                   <input
                     type="color"
                     className="h-0 w-0 opacity-0"
+                    value={sharedBg ?? "#ffffff"}
                     onChange={(e) => dispatch({ type: "setBackground", ids: selection, color: e.target.value })}
                   />
                 </label>
               </div>
+              <p className="mt-1.5 text-[10px]" style={{ fontFamily: "var(--mono)", color: "var(--text-muted)" }}>
+                {sharedBg === undefined ? "Fondos distintos" : sharedBg === null ? "Sin fondo" : `Fondo ${sharedBg}`}
+              </p>
+              <label className="mt-2 flex cursor-pointer items-start gap-2 text-[11px] leading-snug" style={{ color: "var(--text)" }}>
+                <input
+                  type="checkbox"
+                  className="mt-0.5 shrink-0"
+                  checked={sharedTint}
+                  onChange={(e) => dispatch({ type: "setTint", ids: selection, value: e.target.checked })}
+                />
+                <span>
+                  <strong>Teñir la hoja</strong> — para PDFs que traen su propia hoja blanca (Google Docs,
+                  membretes): el color va encima como un acetato. Usa colores claros.
+                </span>
+              </label>
+              {sharedTint && sharedBg && isDarkPaper(sharedBg) && (
+                <p className="mt-1 text-[10px]" style={{ color: "var(--danger)" }}>
+                  Con un color oscuro teñido, el texto del PDF casi no se verá.
+                </p>
+              )}
               <button
                 className="btn-ghost mt-2 w-full"
                 onClick={() => dispatch({ type: "setBackground", ids: selection, color: null })}
@@ -485,6 +539,7 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, recompiling }: P
           bytes={bytesFor(current.id, current.bytesB64)}
           onConfirm={confirmCurrent}
           onClose={cancelCurrent}
+          onError={onError}
         />
       )}
 

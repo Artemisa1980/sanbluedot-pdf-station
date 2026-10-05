@@ -35,6 +35,9 @@ function createWindow(): void {
   // La estación no navega: archivos importados son datos, nunca destinos del renderer.
   win.webContents.on("will-navigate", (event) => event.preventDefault());
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  // La interfaz no usa permisos del navegador (cámara, notificaciones…) ni <webview>
+  win.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+  win.webContents.on("will-attach-webview", (event) => event.preventDefault());
 
   // Protección de trabajo: cerrar con cambios sin guardar pide confirmación
   win.on("close", (e) => {

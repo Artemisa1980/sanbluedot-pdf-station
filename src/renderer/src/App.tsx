@@ -10,6 +10,7 @@ import { useStation } from "./state/store";
 import { useAutoRecompile } from "./state/useAutoRecompile";
 import { useDraftAutosave } from "./state/useDraftAutosave";
 import { bytesToB64 } from "../../shared/b64";
+import { cleanErrorText } from "./engine/errorText";
 import badgeUrl from "./assets/sanblue-badge.png";
 
 declare const __APP_VERSION__: string;
@@ -43,9 +44,12 @@ export default function App() {
   // borraría el borrador que estamos por ofrecer (dirty nace en false)
   const [draftReady, setDraftReady] = useState(false);
 
+  // Un aviso nuevo reinicia el reloj: el temporizador del anterior ya no lo cierra antes de sus 5 s
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   function showToast(kind: "ok" | "error", msg: string) {
-    setToast({ kind, msg });
-    setTimeout(() => setToast(null), 5000);
+    setToast({ kind, msg: cleanErrorText(msg) });
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 5000);
   }
 
   // Borrador de recuperación: si existe al arrancar, la app murió con trabajo sin guardar
@@ -280,15 +284,23 @@ export default function App() {
           <span className="header-action-separator" aria-hidden="true" />
           <button
             className="btn-ghost export-button"
-            disabled={exporting || project.pages.length === 0 || recompiling.size > 0}
+            disabled={exporting || project.pages.length === 0 || recompiling.busy.size > 0 || recompiling.stale.size > 0}
             onClick={handleExport}
             title={
-              recompiling.size > 0
-                ? "Aplicando el estilo nuevo… un momento"
-                : "Fusionar todo el documento en un PDF vectorial"
+              recompiling.busy.size > 0
+                ? "Actualizando el documento… un momento"
+                : recompiling.stale.size > 0
+                  ? "Un documento no se pudo actualizar: ábrelo y dale ⚡ Compilar"
+                  : "Fusionar todo el documento en un PDF vectorial"
             }
           >
-            {exporting ? "Exportando…" : recompiling.size > 0 ? "◌ Aplicando estilo…" : "⚡ EXPORTAR PDF"}
+            {exporting
+              ? "Exportando…"
+              : recompiling.busy.size > 0
+                ? "◌ Actualizando…"
+                : recompiling.stale.size > 0
+                  ? "⚠ Documento sin actualizar"
+                  : "⚡ EXPORTAR PDF"}
           </button>
           <button className="btn-ghost header-secondary" onClick={toggle} title="Cambiar tema">
             {dark ? "◑" : "◐"}
@@ -302,7 +314,8 @@ export default function App() {
             editingDocId={editingDocId}
             onOpenDoc={openDoc}
             onOpenPdf={openReaderAt}
-            recompiling={recompiling}
+            onError={(msg) => showToast("error", msg)}
+            recompiling={recompiling.busy}
           />
         )}
 

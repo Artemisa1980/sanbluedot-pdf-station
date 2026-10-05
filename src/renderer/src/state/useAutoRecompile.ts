@@ -1,35 +1,40 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useStation } from "./store";
 import { compileDoc } from "../engine/compile";
-import { resolveStyle } from "../engine/presets";
+import { docSignature, isStale } from "../engine/staleness";
 
 /**
- * Vigilante de estilos: el Control Estético despacha el estilo nuevo al proyecto,
- * pero la compilación vivía solo en el editor (⚡) — fuera de él, el fondo nuevo se
- * pintaba bajo el PDF viejo y el contenido opaco se sobreponía (fallas F1/F2,
- * 2026-07-02). Este hook recompila solo, con pausa, cualquier doc YA compilado cuyo
- * estilo — o el tamaño/márgenes del proyecto — cambie, en cualquier vista. También
- * protege EXPORTAR: sin esto, exportar tras un cambio de estilo mezclaba fondo
- * nuevo + contenido viejo en el PDF final.
+ * Vigilante de documentos compilados: cada doc guarda la firma (texto, estilo, preset,
+ * página y márgenes) con que se compiló su PDF. Si la fuente actual ya no coincide, el
+ * PDF está viejo y este hook lo recompila solo, con pausa, en cualquier vista.
  *
- * Devuelve los ids de docs "ocupados" (esperando la pausa o compilando) para que la
- * UI lo muestre y el export espere.
+ * - Editar el texto o el estilo y exportar sin ⚡ Compilar ya no saca la versión anterior.
+ * - Un proyecto guardado a mitad de una pausa, o de antes de v1.10, se recompila al abrirlo.
+ * - Un resultado que llega cuando el doc ya cambió (más texto, otro proyecto con el mismo
+ *   id) se descarta.
+ * - Si una compilación falla, el doc queda viejo y EXPORTAR sigue bloqueado hasta que el
+ *   texto cambie o se compile con ⚡ (sin reintentos en bucle).
+ *
+ * Devuelve `busy` (esperando la pausa o compilando) y `stale` (PDF viejo, incluye los que
+ * fallaron) para que la UI lo muestre y el export espere.
  */
 const DEBOUNCE_MS = 700;
 
-export function useAutoRecompile(onError: (msg: string) => void): Set<string> {
+export function useAutoRecompile(onError: (msg: string) => void): { busy: Set<string>; stale: Set<string> } {
   const { project, dispatch } = useStation();
   const [busy, setBusy] = useState<Set<string>>(() => new Set());
-  // Firma por doc de todo lo que cambia el PDF sin tocar el contenido
-  const sigs = useRef(new Map<string, string>());
+  // Firma programada o compilándose por doc, y firma que falló: ninguna se vuelve a programar
+  const queued = useRef(new Map<string, string>());
+  const failed = useRef(new Map<string, string>());
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  const tokens = useRef(new Map<string, number>());
+  const inFlight = useRef(new Map<string, number>());
   const projectRef = useRef(project);
   projectRef.current = project;
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
 
-  function clearBusy(docId: string) {
+  function releaseIfIdle(docId: string) {
+    if (timers.current.has(docId) || (inFlight.current.get(docId) ?? 0) > 0) return;
     setBusy((prev) => {
       if (!prev.has(docId)) return prev;
       const next = new Set(prev);
@@ -38,11 +43,10 @@ export function useAutoRecompile(onError: (msg: string) => void): Set<string> {
     });
   }
 
-  function schedule(docId: string) {
+  function schedule(docId: string, sig: string) {
     const pending = timers.current.get(docId);
     if (pending !== undefined) clearTimeout(pending);
-    // Invalida también la compilación en vuelo: su resultado ya nació viejo
-    tokens.current.set(docId, (tokens.current.get(docId) ?? 0) + 1);
+    queued.current.set(docId, sig);
     setBusy((prev) => (prev.has(docId) ? prev : new Set(prev).add(docId)));
     timers.current.set(
       docId,
@@ -53,30 +57,37 @@ export function useAutoRecompile(onError: (msg: string) => void): Set<string> {
     );
   }
 
+  /** Firma actual del doc en el proyecto vivo, o null si ya no existe */
+  function currentSig(docId: string): string | null {
+    const proj = projectRef.current;
+    const doc = proj.docs.find((d) => d.id === docId);
+    return doc ? docSignature(doc, proj) : null;
+  }
+
   async function run(docId: string) {
-    const token = (tokens.current.get(docId) ?? 0) + 1;
-    tokens.current.set(docId, token);
     const proj = projectRef.current;
     const doc = proj.docs.find((d) => d.id === docId);
     if (!doc) {
-      clearBusy(docId);
+      releaseIfIdle(docId);
       return;
     }
+    const sig = docSignature(doc, proj);
+    inFlight.current.set(docId, (inFlight.current.get(docId) ?? 0) + 1);
     try {
       const { compiledB64, previousPageCount, pageCount } = await compileDoc(doc, proj);
-      if (tokens.current.get(docId) !== token) return; // llegó tarde — hay una más nueva
-      dispatch({ type: "setDocPages", docId, compiledB64, previousPageCount, pageCount });
+      if (currentSig(docId) !== sig) return; // el doc cambió mientras compilaba: resultado viejo
+      failed.current.delete(docId);
+      dispatch({ type: "setDocPages", docId, compiledB64, previousPageCount, pageCount, compiledSig: sig });
     } catch (e) {
-      if (tokens.current.get(docId) === token) {
-        onErrorRef.current(
-          e instanceof Error ? e.message : "Error al aplicar el estilo del documento."
-        );
+      if (currentSig(docId) === sig) {
+        failed.current.set(docId, sig);
+        const detail = e instanceof Error ? e.message : "Error al actualizar el documento.";
+        onErrorRef.current(`${detail} Exportar queda en pausa: abre el documento y dale ⚡ Compilar.`);
       }
     } finally {
-      // Solo la corrida vigente libera el estado; si ya hay otra pausa en marcha, sigue ocupado
-      if (tokens.current.get(docId) === token && !timers.current.has(docId)) {
-        clearBusy(docId);
-      }
+      if (queued.current.get(docId) === sig) queued.current.delete(docId);
+      inFlight.current.set(docId, (inFlight.current.get(docId) ?? 1) - 1);
+      releaseIfIdle(docId);
     }
   }
 
@@ -84,31 +95,30 @@ export function useAutoRecompile(onError: (msg: string) => void): Set<string> {
     const seen = new Set<string>();
     for (const doc of project.docs) {
       seen.add(doc.id);
-      const sig = JSON.stringify([
-        resolveStyle(doc),
-        doc.preset,
-        project.pageSize,
-        project.margins
-      ]);
-      const prev = sigs.current.get(doc.id);
-      sigs.current.set(doc.id, sig);
-      // Primera vez (recién creado o proyecto recién abierto) → registrar sin compilar.
-      // Sin compiledB64 no hay nada viejo que refrescar: la primera ⚡ es del editor.
-      if (prev === undefined || prev === sig || !doc.compiledB64) continue;
-      schedule(doc.id);
+      // Sin compiledB64 no hay nada viejo que refrescar: la primera ⚡ es del editor
+      if (!doc.compiledB64) continue;
+      const sig = docSignature(doc, project);
+      if (doc.compiledSig === sig || queued.current.get(doc.id) === sig || failed.current.get(doc.id) === sig) continue;
+      schedule(doc.id, sig);
     }
-    // Docs que ya no existen: soltar firma, timer, corridas en vuelo y estado ocupado
-    for (const id of [...sigs.current.keys()]) {
+    // Docs que ya no existen: soltar firma, timer y estado ocupado
+    for (const id of [...new Set([...queued.current.keys(), ...failed.current.keys(), ...timers.current.keys()])]) {
       if (seen.has(id)) continue;
-      sigs.current.delete(id);
+      queued.current.delete(id);
+      failed.current.delete(id);
       const t = timers.current.get(id);
       if (t !== undefined) clearTimeout(t);
       timers.current.delete(id);
-      tokens.current.set(id, (tokens.current.get(id) ?? 0) + 1);
-      clearBusy(id);
+      releaseIfIdle(id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.docs, project.pageSize, project.margins]);
 
-  return busy;
+  const stale = useMemo(
+    () => new Set(project.docs.filter((d) => isStale(d, project)).map((d) => d.id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [project.docs, project.pageSize, project.margins]
+  );
+
+  return { busy, stale };
 }

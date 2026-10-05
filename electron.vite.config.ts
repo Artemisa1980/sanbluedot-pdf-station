@@ -10,6 +10,15 @@ export default defineConfig({
   preload: {},
   renderer: {
     define: { __APP_VERSION__: JSON.stringify(version) },
-    plugins: [react(), tailwindcss()]
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        // El servidor de desarrollo necesita localhost; la app empaquetada no se conecta a nada
+        name: "production-csp",
+        apply: "build",
+        transformIndexHtml: (html: string) => html.replace(" ws://localhost:* http://localhost:*", "")
+      }
+    ]
   }
 });

@@ -17,7 +17,7 @@ function isColor(value: unknown): value is string {
   return isString(value) && HEX_COLOR.test(value);
 }
 
-function isDocStyle(value: unknown): value is DocStyle {
+export function isDocStyle(value: unknown): value is DocStyle {
   if (!isRecord(value)) return false;
   return (
     isString(value.fontId) &&
@@ -56,7 +56,8 @@ function isSourceDoc(value: unknown): value is SourceDoc {
     isString(value.content) &&
     isString(value.preset) &&
     (value.style === undefined || isDocStyle(value.style)) &&
-    (value.compiledB64 === null || (isString(value.compiledB64) && value.compiledB64.length > 0))
+    (value.compiledB64 === null || (isString(value.compiledB64) && value.compiledB64.length > 0)) &&
+    (value.compiledSig === undefined || isString(value.compiledSig))
   );
 }
 
@@ -69,6 +70,7 @@ function isPageRef(value: unknown): value is PageRef {
     Number.isInteger(value.pageIndex) && (value.pageIndex as number) >= 0 &&
     ROTATIONS.has(value.rotation as number) &&
     (value.background === null || isColor(value.background)) &&
+    (value.tint === undefined || typeof value.tint === "boolean") &&
     Array.isArray(value.patches) && value.patches.every(isPatch)
   );
 }
@@ -115,6 +117,32 @@ export function validateProject(data: unknown): data is StationProject {
   );
 }
 
+const positive = (value: unknown): boolean => typeof value === "number" && Number.isFinite(value) && value > 0;
+
+/**
+ * Antes de v1.10 los campos de tamaño aceptaban 0 o negativos, y el .sbstation guardado así
+ * ya no abría. Al abrir se reponen esos valores (cuerpo 9.5 pt, interlineado 1.4, parche 11 pt)
+ * en vez de rechazar el proyecto entero. Solo toca números inválidos; lo demás se valida igual.
+ */
+function repairLegacySizes(data: unknown): void {
+  if (!isRecord(data)) return;
+  if (Array.isArray(data.docs)) {
+    for (const doc of data.docs) {
+      if (!isRecord(doc) || !isRecord(doc.style)) continue;
+      if (!positive(doc.style.fontSizePt)) doc.style.fontSizePt = 9.5;
+      if (!positive(doc.style.lineHeight)) doc.style.lineHeight = 1.4;
+    }
+  }
+  if (Array.isArray(data.pages)) {
+    for (const page of data.pages) {
+      if (!isRecord(page) || !Array.isArray(page.patches)) continue;
+      for (const patch of page.patches) {
+        if (isRecord(patch) && !positive(patch.fontSize)) patch.fontSize = 11;
+      }
+    }
+  }
+}
+
 export function serialize(project: StationProject): string {
   return JSON.stringify(project);
 }
@@ -126,6 +154,7 @@ export function deserialize(json: string): StationProject {
   } catch {
     throw new Error("El archivo no es un proyecto .sbstation válido (JSON dañado).");
   }
+  repairLegacySizes(data);
   if (!validateProject(data)) {
     throw new Error("El archivo no es un proyecto .sbstation válido (estructura desconocida).");
   }

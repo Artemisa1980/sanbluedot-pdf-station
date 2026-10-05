@@ -9,6 +9,8 @@ const MARGINS = {
   apa: { top: 1, bottom: 1, left: 1, right: 1 }
 } as const;
 
+const COMPILE_TIMEOUT_MS = 120_000;
+
 let isolatedCompileSession: Session | null = null;
 
 function compileSession(): Session {
@@ -20,6 +22,8 @@ function compileSession(): Session {
     { urls: ["http://*/*", "https://*/*"] },
     (_details, callback) => callback({ cancel: true })
   );
+  // Un documento importado no pide permisos (cámara, notificaciones…): se niegan todos
+  isolated.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
   isolatedCompileSession = isolated;
   return isolated;
 }
@@ -51,19 +55,30 @@ export async function htmlToPdf(html: string, opts: HtmlToPdfOptions): Promise<B
   });
   win.webContents.on("will-navigate", (event) => event.preventDefault());
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  try {
+  const print = (async () => {
     await win.loadFile(tmp);
     // Esperar a que las fuentes web terminen de cargar antes de imprimir
     await win.webContents.executeJavaScript("document.fonts.ready.then(() => true)");
-    return await win.webContents.printToPDF({
+    return win.webContents.printToPDF({
       pageSize: opts.pageSize === "letter" ? "Letter" : "A4",
       printBackground: true,
       margins: MARGINS[opts.margins],
       displayHeaderFooter: opts.pageNumbers,
       headerTemplate: "<div></div>",
-      footerTemplate: `<div style="width:100%;text-align:right;font-size:8px;padding-right:12mm;color:${opts.footerColor || "#5b6472"};font-family:monospace;"><span class="pageNumber"></span></div>`
+      footerTemplate: `<div style="width:100%;text-align:right;font-size:8px;padding-right:12mm;color:${opts.footerColor || "#5b6472"};font-family:Menlo,Consolas,monospace;"><span class="pageNumber"></span></div>`
     });
+  })();
+  // Si la ventana oculta se cuelga, la compilación termina con error en vez de esperar
+  // para siempre (y dejar EXPORTAR bloqueado sin explicación)
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("La compilación tardó más de 2 minutos y se canceló.")), COMPILE_TIMEOUT_MS);
+  });
+  print.catch(() => {}); // un rechazo tardío, tras el timeout, no queda sin manejar
+  try {
+    return await Promise.race([print, timeout]);
   } finally {
+    clearTimeout(timer);
     win.destroy();
     rm(tmp, { force: true }).catch(() => {});
   }

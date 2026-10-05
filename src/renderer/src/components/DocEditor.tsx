@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStation } from "../state/store";
 import { compileDoc, compileDocRaw } from "../engine/compile";
+import { docSignature } from "../engine/staleness";
+import { cleanErrorText } from "../engine/errorText";
 import { exportProject } from "../engine/exportProject";
 import { resolveStyle } from "../engine/presets";
 import { evictBytes } from "../engine/bytesCache";
@@ -99,8 +101,10 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
     setCompiling(true);
     setError(null);
     try {
-      const { compiledB64, previousPageCount, pageCount } = await compileDoc({ ...doc, content }, project);
-      dispatch({ type: "setDocPages", docId, compiledB64, previousPageCount, pageCount });
+      const source = { ...doc, content };
+      const { compiledB64, previousPageCount, pageCount } = await compileDoc(source, project);
+      // La firma registra con qué texto y estilo se compiló: si algo cambia, el vigilante recompila
+      dispatch({ type: "setDocPages", docId, compiledB64, previousPageCount, pageCount, compiledSig: docSignature(source, project) });
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error desconocido al compilar.");
@@ -182,6 +186,7 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
       }}
       value={content}
       onChange={(e) => updateContent(e.target.value)}
+      readOnly={compiling}
       spellCheck={false}
       placeholder={doc.kind === "md" ? "# Escribe tu Markdown aquí…" : "<h1>Escribe tu HTML aquí…</h1>"}
     />
@@ -275,7 +280,7 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
           className="px-4 py-2 text-[12px]"
           style={{ background: "var(--danger-soft)", color: "var(--danger)", fontFamily: "var(--mono)" }}
         >
-          {error}
+          {cleanErrorText(error)}
         </div>
       )}
 

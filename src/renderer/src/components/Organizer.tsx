@@ -186,6 +186,7 @@ export function Organizer({ openAt, onOpenConsumed }: Props) {
                       pageIndex={p.pageIndex}
                       rotation={p.rotation}
                       background={effectiveBackground(project, p)}
+                      tint={Boolean(p.tint)}
                       width={150}
                     />
                   </PageCard>

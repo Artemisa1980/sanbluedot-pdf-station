@@ -4,8 +4,9 @@ import sanblueCss from "../assets/sanbluedot-pdf.css?raw";
 import { b64ToBytes } from "../../../shared/b64";
 import { evictBytes } from "./bytesCache";
 import { evictSource } from "./thumbnails";
-import { fontById } from "./fonts";
+import { CODE_FONT_FACES, fontById } from "./fonts";
 import { presetById, resolveStyle } from "./presets";
+import { mathCss, mathExtension } from "./math";
 import type { DocStyle, SourceDoc, StationProject } from "../../../shared/types";
 
 /* La firma sanblueᵈᵒᵗ NO se inyecta aquí: vive dentro del contenido del documento
@@ -35,6 +36,7 @@ marked.use({
     }
   }
 });
+marked.use(mathExtension);
 
 /** CSS del estilo granular — pisa al preset. Todo es CSS puro → printToPDF vectorial. */
 function granularCss(style: DocStyle): string {
@@ -60,7 +62,12 @@ export function isDarkPaper(hex: string): boolean {
 export function buildDocHtml(doc: SourceDoc): string {
   const preset = presetById(doc.preset);
   const style = resolveStyle(doc);
-  const font = fontById(style.fontId);
+  // Letra del cuerpo + letras propias del preset (títulos) + Fira completa de los bloques de código
+  const faces = [
+    ...new Set([fontById(style.fontId).faces, ...(preset.fontIds ?? []).map((id) => fontById(id).faces), CODE_FONT_FACES])
+  ]
+    .filter(Boolean)
+    .join("\n");
   const body =
     doc.kind === "md" ? (marked.parse(doc.content, { async: false }) as string) : doc.content;
   return `<!doctype html>
@@ -69,8 +76,9 @@ export function buildDocHtml(doc: SourceDoc): string {
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: file: blob:; style-src 'unsafe-inline'; font-src data: file:; script-src 'none'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <style>
-${font.faces ?? ""}
+${faces}
 ${sanblueCss}
+${mathCss}
 /* Estación: body transparente para que el fondo por página (capa vectorial del
    organizador) llene TODA la hoja y no solo los márgenes. Sin fondo aplicado se
    ve blanco igual. El estilo del documento lo pisa justo después. */

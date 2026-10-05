@@ -1,16 +1,75 @@
 import {
+  BlendMode,
   PDFDocument,
   PDFEmbeddedPage,
   PDFFont,
   PDFPage,
   StandardFonts,
+  breakTextIntoLines,
+  clip,
   degrees,
+  endPath,
+  popGraphicsState,
+  pushGraphicsState,
+  rectangle,
   rgb,
   type PageBoundingBox
 } from "pdf-lib";
 import { b64ToBytes } from "../../../shared/b64";
 import { effectiveBackground } from "./sources";
 import type { PageRef, StationProject } from "../../../shared/types";
+
+/* El texto de los parches usa Helvetica estándar (codificación WinAnsi): latín con acentos,
+   ñ, ¿¡, €, comillas y rayas. Un carácter fuera de esa tabla (→ ✓ ≥ α, emoji, ᵈᵒᵗ) hacía
+   fallar TODA la exportación con un error en inglés. */
+const WIN_ANSI_EXTRA = "€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ";
+
+/** Caracteres del texto de un parche que el PDF no puede dibujar (sin repetir, en orden). */
+export function unsupportedPatchChars(text: string): string[] {
+  const bad = new Set<string>();
+  for (const ch of text) {
+    const cp = ch.codePointAt(0)!;
+    if (ch === "\n" || (cp >= 0x20 && cp <= 0x7e) || (cp >= 0xa0 && cp <= 0xff) || WIN_ANSI_EXTRA.includes(ch)) continue;
+    bad.add(ch);
+  }
+  return [...bad];
+}
+
+/* pdf-lib compila sus errores a ES5: `instanceof EncryptedPDFError` da false (verificado con
+   pdf-lib 1.17.1), así que el PDF protegido se reconoce por el mensaje del error. */
+const isEncryptedError = (e: unknown): boolean => e instanceof Error && /is encrypted/.test(e.message);
+
+/** Revisa un PDF al importarlo: null si se puede exportar, o el motivo en español. */
+export async function pdfImportProblem(bytes: Uint8Array): Promise<string | null> {
+  try {
+    await PDFDocument.load(bytes);
+    return null;
+  } catch (e) {
+    return isEncryptedError(e)
+      ? "está protegido con contraseña de permisos y no se podría exportar. Quítale la protección y vuelve a importarlo."
+      : "no se pudo leer: el archivo está dañado o no es un PDF.";
+  }
+}
+
+/**
+ * Punto de la vista que muestra pdf.js (página girada por su /Rotate, origen arriba-izquierda,
+ * en puntos) → puntos PDF de la página sin girar (origen abajo-izquierda). El editor de parches
+ * dibuja sobre esa vista, así que los parches se convierten con esta función.
+ */
+function viewToPdf(rotate: number, width: number, height: number) {
+  return (u: number, v: number): [number, number] => {
+    switch (rotate) {
+      case 90:
+        return [v, u];
+      case 180:
+        return [width - u, v];
+      case 270:
+        return [width - v, height - u];
+      default:
+        return [u, height - v];
+    }
+  };
+}
 
 /**
  * EL CORAZÓN DE LA ESTACIÓN — Principio 1 del framework: nunca rasterizar.
@@ -68,8 +127,24 @@ export async function exportProject(project: StationProject): Promise<Uint8Array
   const srcDocs = new Map<string, PDFDocument>();
   let font: PDFFont | null = null;
 
+  for (const [i, ref] of project.pages.entries()) {
+    const bad = ref.patches.flatMap((p) => unsupportedPatchChars(p.text));
+    if (bad.length > 0) {
+      throw new Error(
+        `Un parche de la página ${i + 1} usa caracteres que el PDF no puede dibujar: ${[...new Set(bad)].join(" ")}. Cámbialos en el editor de parches.`
+      );
+    }
+  }
+
   for (const ref of project.pages) {
-    if (!srcDocs.has(ref.srcId)) srcDocs.set(ref.srcId, await PDFDocument.load(srcBytes(project, ref)));
+    if (srcDocs.has(ref.srcId)) continue;
+    try {
+      srcDocs.set(ref.srcId, await PDFDocument.load(srcBytes(project, ref)));
+    } catch (e) {
+      if (!isEncryptedError(e)) throw e;
+      const name = project.pdfs.find((p) => p.id === ref.srcId)?.name ?? ref.srcId;
+      throw new Error(`"${name}" está protegido con contraseña de permisos: quítale la protección y vuelve a importarlo.`);
+    }
   }
 
   // Fondo efectivo: manual o el papel de color del doc (pinta la hoja completa,
@@ -129,42 +204,66 @@ export async function exportProject(project: StationProject): Promise<Uint8Array
     }
 
     // Camino de capas: fondo → original → parches (todo vectorial)
-    const box = visibleBox(srcDocs.get(ref.srcId)!.getPage(ref.pageIndex));
+    const srcPage = srcDocs.get(ref.srcId)!.getPage(ref.pageIndex);
+    const box = visibleBox(srcPage);
     const width = box.right - box.left;
     const height = box.top - box.bottom;
     const page = out.addPage([width, height]);
+    // Giro propio de la página fuente (/Rotate, típico de escaneos): la hoja se arma sin girar
+    // y la salida lo conserva sumado al giro del organizador
+    const srcRotation = ((srcPage.getRotation().angle % 360) + 360) % 360;
+    const sideways = srcRotation === 90 || srcRotation === 270;
+    const viewW = sideways ? height : width;
+    const viewH = sideways ? width : height;
+    const toPdf = viewToPdf(srcRotation, width, height);
 
-    if (background) {
+    // Fondo normal: debajo del original. Teñir la hoja (PDFs con hoja blanca opaca propia):
+    // encima en modo multiplicar, como un acetato de color — lo blanco toma el color y el
+    // texto negro sigue negro. Los parches van después, sin teñir.
+    const tint = Boolean(background && ref.tint);
+    if (background && !tint) {
       page.drawRectangle({ x: 0, y: 0, width, height, color: hexToRgb(background) });
     }
 
     const original = embedded.get(slot);
     if (original) page.drawPage(original);
 
-    for (const p of ref.patches) {
-      const x = p.x * width;
-      const w = p.w * width;
-      const h = p.h * height;
-      const y = height - (p.y + p.h) * height; // normalizado top-left → puntos PDF bottom-left
-      page.drawRectangle({ x, y, width: w, height: h, color: hexToRgb(p.color) });
-      if (p.text.trim()) {
-        if (!font) font = await out.embedFont(StandardFonts.Helvetica);
-        const size = p.fontSize;
-        const lineHeight = size * 1.3;
-        const pad = size * 0.4;
-        p.text.split("\n").forEach((line, i) => {
-          page.drawText(line, {
-            x: x + pad,
-            y: y + h - pad - size - i * lineHeight,
-            size,
-            font: font!,
-            color: hexToRgb(p.textColor)
-          });
-        });
-      }
+    if (background && tint) {
+      page.drawRectangle({ x: 0, y: 0, width, height, color: hexToRgb(background), blendMode: BlendMode.Multiply });
     }
 
-    if (ref.rotation) page.setRotation(degrees(ref.rotation));
+    for (const p of ref.patches) {
+      // Coordenadas normalizadas top-left de la vista del editor → rectángulo en puntos PDF
+      const u = p.x * viewW;
+      const v = p.y * viewH;
+      const w = p.w * viewW;
+      const h = p.h * viewH;
+      const [x1, y1] = toPdf(u, v);
+      const [x2, y2] = toPdf(u + w, v + h);
+      const rect = { x: Math.min(x1, x2), y: Math.min(y1, y2), width: Math.abs(x2 - x1), height: Math.abs(y2 - y1) };
+      page.drawRectangle({ ...rect, color: hexToRgb(p.color) });
+      if (!p.text.trim()) continue;
+
+      if (!font) font = await out.embedFont(StandardFonts.Helvetica);
+      const textFont = font;
+      const size = p.fontSize;
+      const lineHeight = size * 1.3;
+      const pad = size * 0.4;
+      // Igual que el editor: el texto se acomoda al ancho del parche y lo que no cabe se recorta
+      const lines = p.text
+        .split("\n")
+        .flatMap((line) => breakTextIntoLines(line, [" "], w - 2 * pad, (t) => textFont.widthOfTextAtSize(t, size)));
+      page.pushOperators(pushGraphicsState(), rectangle(rect.x, rect.y, rect.width, rect.height), clip(), endPath());
+      lines.forEach((line, i) => {
+        if (pad + i * lineHeight >= h) return;
+        const [x, y] = toPdf(u + pad, v + pad + size + i * lineHeight);
+        page.drawText(line, { x, y, size, font: textFont, color: hexToRgb(p.textColor), rotate: degrees(srcRotation) });
+      });
+      page.pushOperators(popGraphicsState());
+    }
+
+    const rotation = (srcRotation + ref.rotation) % 360;
+    if (rotation) page.setRotation(degrees(rotation));
   }
 
   return out.save();

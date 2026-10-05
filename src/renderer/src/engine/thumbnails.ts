@@ -28,8 +28,13 @@ function docFor(srcId: string, bytes: Uint8Array): Promise<PDFDocumentProxy> {
   let d = docs.get(srcId);
   if (!d) {
     // pdfjs transfiere (y deja inutilizable) el buffer que recibe → siempre darle una copia
-    d = pdfjsLib.getDocument({ data: bytes.slice() }).promise;
-    docs.set(srcId, d);
+    const loading = pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+    docs.set(srcId, loading);
+    // Una carga fallida no se queda en caché: el siguiente intento vuelve a abrir el PDF
+    loading.catch(() => {
+      if (docs.get(srcId) === loading) docs.delete(srcId);
+    });
+    d = loading;
   }
   return d;
 }

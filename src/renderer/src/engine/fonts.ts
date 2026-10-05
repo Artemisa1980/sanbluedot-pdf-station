@@ -8,8 +8,10 @@ import instrumentSerif from "@fontsource/instrument-serif/files/instrument-serif
 import instrumentSerifItalic from "@fontsource/instrument-serif/files/instrument-serif-latin-400-italic.woff2?inline";
 import outfit400 from "@fontsource/outfit/files/outfit-latin-400-normal.woff2?inline";
 import outfit600 from "@fontsource/outfit/files/outfit-latin-600-normal.woff2?inline";
-import fira400 from "@fontsource/fira-code/files/fira-code-latin-400-normal.woff2?inline";
-import fira700 from "@fontsource/fira-code/files/fira-code-latin-700-normal.woff2?inline";
+// Fira Code 6.2 completa (OFL 1.1, assets/fonts/FiraCode-OFL.txt): el subset latin de
+// @fontsource no trae ─ → ≠ √ ≤ ⁿ y esos caracteres caían a otra fuente dentro de los diagramas
+import fira400 from "../assets/fonts/FiraCode-Regular.woff2?inline";
+import fira700 from "../assets/fonts/FiraCode-Bold.woff2?inline";
 import lora400 from "@fontsource/lora/files/lora-latin-400-normal.woff2?inline";
 import lora400i from "@fontsource/lora/files/lora-latin-400-italic.woff2?inline";
 import lora700 from "@fontsource/lora/files/lora-latin-700-normal.woff2?inline";
@@ -117,6 +119,9 @@ export const FONT_CHOICES: FontChoice[] = [
     faces: face("IBM Plex Mono", 400, "normal", plexMono400) + face("IBM Plex Mono", 700, "normal", plexMono700)
   }
 ];
+
+/** @font-face de los bloques de código: Fira Code completa, sea cual sea la letra del cuerpo. */
+export const CODE_FONT_FACES = fontById("fira").faces ?? "";
 
 export function fontById(id: string): FontChoice {
   return FONT_CHOICES.find((f) => f.id === id) ?? FONT_CHOICES[0];

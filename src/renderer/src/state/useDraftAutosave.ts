@@ -26,13 +26,16 @@ export function useDraftAutosave(
   stateRef.current = { project, dirty, currentPath };
   const lastWritten = useRef<StationProject | null>(null);
   const prevDirty = useRef(false);
+  // Escrituras y borrados van en fila: un borrado que llega mientras se escribe el borrador
+  // espera a que termine; si no, el borrador sobrevivía al guardado y pedía restaurar sin razón
+  const queue = useRef<Promise<void>>(Promise.resolve());
 
   // dirty true→false = el trabajo quedó a salvo o fue descartado a propósito → limpiar
   useEffect(() => {
     if (!enabled) return;
     if (prevDirty.current && !dirty) {
       lastWritten.current = null;
-      void window.station.draftClear();
+      queue.current = queue.current.then(() => window.station.draftClear()).catch(() => {});
     }
     prevDirty.current = dirty;
   }, [dirty, enabled]);
@@ -44,8 +47,10 @@ export function useDraftAutosave(
       // Escribe solo con cambios sin guardar Y si el proyecto cambió desde la última vez
       if (!s.dirty || lastWritten.current === s.project) return;
       lastWritten.current = s.project;
-      window.station
-        .draftWrite(serialize(s.project), { name: s.project.name, filePath: s.currentPath })
+      const json = serialize(s.project);
+      const meta = { name: s.project.name, filePath: s.currentPath };
+      queue.current = queue.current
+        .then(() => window.station.draftWrite(json, meta))
         .catch(() => {
           lastWritten.current = null; // falló → reintenta en el próximo tick
         });

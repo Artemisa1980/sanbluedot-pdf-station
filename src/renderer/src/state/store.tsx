@@ -38,6 +38,8 @@ export type Action =
       type: "setDocPages";
       docId: string;
       compiledB64: string;
+      /** Firma de las entradas con que se compiló (engine/staleness.ts) */
+      compiledSig: string;
       previousPageCount: number;
       pageCount: number;
     }
@@ -49,6 +51,7 @@ export type Action =
   | { type: "movePages"; ids: string[]; toIndex: number }
   | { type: "rotatePages"; ids: string[]; delta: 90 | -90 }
   | { type: "setBackground"; ids: string[]; color: string | null }
+  | { type: "setTint"; ids: string[]; value: boolean }
   | { type: "addPatch"; pageId: string; patch: Patch }
   | { type: "updatePatch"; pageId: string; patch: Patch }
   | { type: "removePatch"; pageId: string; patchId: string }
@@ -80,7 +83,7 @@ function mapPages(state: StationState, ids: string[], fn: (p: PageRef) => PageRe
   };
 }
 
-function reducer(state: StationState, action: Action): StationState {
+export function reducer(state: StationState, action: Action): StationState {
   const { project } = state;
 
   switch (action.type) {
@@ -119,6 +122,9 @@ function reducer(state: StationState, action: Action): StationState {
       };
 
     case "setDocPages": {
+      // Una compilación que termina después de borrar el doc (o de Nuevo/Abrir) no tiene dónde
+      // ir: sin esto agregaba páginas invisibles y el proyecto guardado ya no se podía abrir
+      if (!project.docs.some((d) => d.id === action.docId)) return state;
       const pages = reconcileDocPages({
         pages: project.pages,
         docId: action.docId,
@@ -133,7 +139,7 @@ function reducer(state: StationState, action: Action): StationState {
         project: {
           ...project,
           docs: project.docs.map((d) =>
-            d.id === action.docId ? { ...d, compiledB64: action.compiledB64 } : d
+            d.id === action.docId ? { ...d, compiledB64: action.compiledB64, compiledSig: action.compiledSig } : d
           ),
           pages
         }
@@ -222,6 +228,9 @@ function reducer(state: StationState, action: Action): StationState {
 
     case "setBackground":
       return mapPages(state, action.ids, (p) => ({ ...p, background: action.color }));
+
+    case "setTint":
+      return mapPages(state, action.ids, (p) => ({ ...p, tint: action.value }));
 
     case "addPatch":
       return mapPages(state, [action.pageId], (p) => ({ ...p, patches: [...p.patches, action.patch] }));

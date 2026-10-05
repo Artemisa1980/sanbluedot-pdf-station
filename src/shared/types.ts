@@ -22,6 +22,9 @@ export interface PageRef {
   pageIndex: number; // 0-based dentro del PDF fuente
   rotation: Rotation;
   background: string | null; // hex o null
+  /** Teñir la hoja: el fondo va ENCIMA en modo multiplicar, para PDFs que pintan su propia
+   *  hoja blanca opaca (Google Docs, membretes). Ausente/false = fondo debajo, como siempre. */
+  tint?: boolean;
   patches: Patch[];
 }
 
@@ -57,6 +60,9 @@ export interface SourceDoc {
   style?: DocStyle;
   // La firma sanblueᵈᵒᵗ viaja DENTRO del contenido del documento (masthead/footer en el md/html)
   compiledB64: string | null; // PDF compilado — se persiste para restaurar sin recompilar
+  /** Firma (engine/staleness.ts) del texto y estilo con que se compiló compiledB64.
+   *  Si no coincide con la fuente actual, el PDF está viejo y se recompila antes de exportar. */
+  compiledSig?: string;
 }
 
 export interface ImportedPdf {

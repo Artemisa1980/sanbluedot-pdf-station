@@ -9,20 +9,28 @@ interface Props {
   bytes: Uint8Array;
   onConfirm: (indices: number[]) => void;
   onClose: () => void;
+  onError: (msg: string) => void;
 }
 
 /** Selector hoja por hoja: elige exactamente qué páginas del PDF entran al documento maestro. */
-export function PagePicker({ name, srcId, bytes, onConfirm, onClose }: Props) {
+export function PagePicker({ name, srcId, bytes, onConfirm, onClose, onError }: Props) {
   const [count, setCount] = useState<number | null>(null);
   const [sel, setSel] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     let alive = true;
-    getPageCount(srcId, bytes).then((n) => {
-      if (!alive) return;
-      setCount(n);
-      setSel(new Set(Array.from({ length: n }, (_, i) => i))); // default: todas
-    });
+    getPageCount(srcId, bytes)
+      .then((n) => {
+        if (!alive) return;
+        setCount(n);
+        setSel(new Set(Array.from({ length: n }, (_, i) => i))); // default: todas
+      })
+      .catch(() => {
+        // Sin esto el selector se quedaba en "Leyendo el PDF…" para siempre
+        if (!alive) return;
+        onError(`"${name}" no se pudo leer para mostrar sus páginas.`);
+        onClose();
+      });
     return () => {
       alive = false;
     };
