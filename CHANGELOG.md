@@ -2,6 +2,14 @@
 
 Earlier versions are described in the [GitHub Releases](https://github.com/Artemisa1980/sanbluedot-pdf-station/releases).
 
+## 1.10.1
+
+### Fixed
+
+- Code blocks and tables printed at a fixed 10pt and 10.5pt, larger than a 9–9.5pt
+  body, and ignored the document's font size. Both now follow the body at 0.95 of its
+  size (9pt for a 9.5pt body). Recompile a document to apply it.
+
 ## 1.10.0 — unreleased
 
 ### Added

@@ -117,7 +117,7 @@ pre code {
   background: none;
   padding: 0;
   color: inherit;
-  font-size: 10pt;
+  font-size: 0.95em; /* relativo al cuerpo: sigue el tamaño de letra del documento */
   line-height: 1.5;
 }
 
@@ -126,7 +126,7 @@ table {
   border-collapse: collapse;
   width: 100%;
   margin: 1rem 0;
-  font-size: 10.5pt;
+  font-size: 0.95em;   /* relativo al cuerpo: sigue el tamaño de letra del documento */
   break-inside: auto;  /* permite dividir la tabla entre páginas si es muy larga */
   break-before: avoid; /* no dejar un salto de página justo antes de la tabla (evita el hueco en blanco) */
 }
