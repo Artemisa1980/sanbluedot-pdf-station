@@ -18,6 +18,8 @@ function isCustomStylePreset(value: unknown): value is CustomStylePreset {
 export function useMyStyles() {
   const [styles, setStyles] = useState<CustomStylePreset[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Siempre la lista más reciente: dos guardados seguidos parten de ella, no de un render viejo
+  const stylesRef = useRef<CustomStylePreset[]>([]);
   const writeVersion = useRef(0);
   const writeQueue = useRef(Promise.resolve());
 
@@ -26,18 +28,22 @@ export function useMyStyles() {
       .myStylesRead()
       .then((saved) => {
         // Un my-styles.json dañado no debe colar un estilo inválido en un documento
-        setStyles(saved.filter(isCustomStylePreset));
+        const valid = saved.filter(isCustomStylePreset);
+        stylesRef.current = valid;
+        setStyles(valid);
         setError(null);
       })
       .catch(() => {
+        stylesRef.current = [];
         setStyles([]);
         setError("No se pudieron leer Mis estilos.");
       });
   }, []);
 
   function persist(next: CustomStylePreset[]): void {
-    const previous = styles;
+    const previous = stylesRef.current;
     const version = ++writeVersion.current;
+    stylesRef.current = next;
     setStyles(next);
     setError(null);
     writeQueue.current = writeQueue.current
@@ -45,6 +51,7 @@ export function useMyStyles() {
       .then(() => window.station.myStylesWrite(next))
       .catch(() => {
         if (writeVersion.current !== version) return;
+        stylesRef.current = previous;
         setStyles(previous);
         setError("No se pudo guardar el cambio en Mis estilos.");
       });
@@ -54,12 +61,12 @@ export function useMyStyles() {
   function save(label: string, baseId: string, style: DocStyle): void {
     const clean = label.trim();
     if (!clean) return;
-    const rest = styles.filter((s) => s.label.toLowerCase() !== clean.toLowerCase());
+    const rest = stylesRef.current.filter((s) => s.label.toLowerCase() !== clean.toLowerCase());
     persist([...rest, { id: newId(), label: clean, baseId, style: { ...style } }]);
   }
 
   function remove(id: string): void {
-    persist(styles.filter((s) => s.id !== id));
+    persist(stylesRef.current.filter((s) => s.id !== id));
   }
 
   return { styles, error, save, remove };

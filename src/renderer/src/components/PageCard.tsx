@@ -1,4 +1,4 @@
-import type { DragEvent, MouseEvent, ReactNode } from "react";
+import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
 import type { PageRef } from "../../../shared/types";
 
 interface Props {
@@ -7,8 +7,10 @@ interface Props {
   sourceName: string;
   selected: boolean;
   dropSide: "left" | "right" | null;
-  onSelect: (e: MouseEvent) => void;
+  onSelect: (e: MouseEvent | KeyboardEvent) => void;
   onOpen: () => void; // doble clic → vista individual
+  /** Alt+flecha: mueve la página (o su selección) una posición */
+  onNudge: (dir: -1 | 1) => void;
   onDragStart: (e: DragEvent) => void;
   onDragOver: (e: DragEvent) => void;
   onDrop: (e: DragEvent) => void;
@@ -25,6 +27,7 @@ export function PageCard({
   dropSide,
   onSelect,
   onOpen,
+  onNudge,
   onDragStart,
   onDragOver,
   onDrop,
@@ -39,7 +42,29 @@ export function PageCard({
         background: selected ? "var(--accent-soft)" : "var(--panel-bg)",
         boxShadow: selected ? "3px 3px 0 rgba(124, 179, 232, 0.45)" : "var(--retro-sm)"
       }}
+      role="option"
+      aria-selected={selected}
+      aria-label={`Página ${index + 1}, ${sourceName}`}
+      data-page-id={page.id}
+      tabIndex={0}
       draggable
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return; // teclas de controles internos (reintentar miniatura)
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(e);
+        } else if (e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowUp")) {
+          e.preventDefault();
+          onNudge(-1);
+        } else if (e.altKey && (e.key === "ArrowRight" || e.key === "ArrowDown")) {
+          e.preventDefault();
+          onNudge(1);
+        } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+          e.preventDefault();
+          const next = e.key === "ArrowLeft" ? e.currentTarget.previousElementSibling : e.currentTarget.nextElementSibling;
+          if (next instanceof HTMLElement) next.focus();
+        }
+      }}
       onClick={onSelect}
       onDoubleClick={onOpen}
       onDragStart={onDragStart}

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog } from "electron";
 import path from "path";
 import { appState, clearDraftSync, registerIpc, trustRenderer } from "./ipc";
+import { devRendererUrl, NETWORK_URL_PATTERNS } from "./guards";
 
 let mainWindow: BrowserWindow | null = null;
 let productionNetworkBlocked = false;
@@ -23,10 +24,12 @@ function createWindow(): void {
   mainWindow = win;
   trustRenderer(win.webContents);
 
-  if (!process.env.ELECTRON_RENDERER_URL && !productionNetworkBlocked) {
+  // La app empaquetada ignora ELECTRON_RENDERER_URL: nunca carga una URL ajena ni salta el bloqueo
+  const devUrl = devRendererUrl(app.isPackaged, process.env);
+  if (!devUrl && !productionNetworkBlocked) {
     // En producción la estación es literalmente offline: ni siquiera localhost.
     win.webContents.session.webRequest.onBeforeRequest(
-      { urls: ["http://*/*", "https://*/*", "ws://*/*", "wss://*/*"] },
+      { urls: NETWORK_URL_PATTERNS },
       (_details, callback) => callback({ cancel: true })
     );
     productionNetworkBlocked = true;
@@ -62,10 +65,12 @@ function createWindow(): void {
   });
   win.on("closed", () => {
     if (mainWindow === win) mainWindow = null;
+    // Una ventana nueva (macOS: clic en el Dock) empieza con un proyecto limpio
+    appState.dirty = false;
   });
 
-  if (process.env.ELECTRON_RENDERER_URL) {
-    win.loadURL(process.env.ELECTRON_RENDERER_URL);
+  if (devUrl) {
+    win.loadURL(devUrl);
   } else {
     win.loadFile(path.join(__dirname, "../renderer/index.html"));
   }

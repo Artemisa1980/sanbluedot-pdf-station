@@ -8,6 +8,34 @@ import { after, before, test } from "node:test";
 import { build } from "esbuild";
 import { PDFDocument, PDFName, PDFString, StandardFonts, degrees, rgb } from "pdf-lib";
 
+/** Without Poppler the raster checks cannot run: a skip locally, a failure in CI. */
+function popplerMissing(t, reason) {
+  if (process.env.CI) assert.fail(`${reason} (required in CI)`);
+  return t.skip(reason);
+}
+
+/** Image XObjects in every page's resources — checked with pdf-lib alone, no Poppler needed. */
+async function imageXObjectCount(bytes) {
+  const pdf = await PDFDocument.load(bytes);
+  let count = 0;
+  const seen = new Set();
+  const visit = (resources) => {
+    const xobjects = resources?.lookup(PDFName.of("XObject"));
+    if (!xobjects) return;
+    for (const [, ref] of xobjects.entries()) {
+      const key = String(ref);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const obj = pdf.context.lookup(ref);
+      const subtype = obj?.dict?.get(PDFName.of("Subtype"));
+      if (subtype === PDFName.of("Image")) count += 1;
+      if (subtype === PDFName.of("Form")) visit(obj.dict.lookup(PDFName.of("Resources")));
+    }
+  };
+  for (const page of pdf.getPages()) visit(page.node.Resources());
+  return count;
+}
+
 let exportProject;
 let unsupportedPatchChars;
 let pdfImportProblem;
@@ -95,7 +123,7 @@ test("preserves page count, mixed dimensions, and rotation", async () => {
 
 test("keeps source and patch text extractable", (t) => {
   const result = spawnSync("pdftotext", [outputPath, "-"], { encoding: "utf8" });
-  if (result.error?.code === "ENOENT") return t.skip("Poppler pdftotext is not installed");
+  if (result.error?.code === "ENOENT") return popplerMissing(t, "Poppler pdftotext is not installed");
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /VECTOR LETTER SOURCE/);
   assert.match(result.stdout, /VECTOR A4 SOURCE/);
@@ -104,7 +132,7 @@ test("keeps source and patch text extractable", (t) => {
 
 test("does not introduce raster images into vector-only source pages", (t) => {
   const result = spawnSync("pdfimages", ["-list", outputPath], { encoding: "utf8" });
-  if (result.error?.code === "ENOENT") return t.skip("Poppler pdfimages is not installed");
+  if (result.error?.code === "ENOENT") return popplerMissing(t, "Poppler pdfimages is not installed");
   assert.equal(result.status, 0, result.stderr);
   const dataLines = result.stdout
     .split("\n")
@@ -223,7 +251,7 @@ test("layers only the visible CropBox and anchors patches to it", async (t) => {
   assert.deepEqual(output.getPage(0).getSize(), { width: 300, height: 400 });
 
   const colors = await quadrantColors(bytes);
-  if (!colors) return t.skip("Poppler pdftoppm is not installed");
+  if (!colors) return popplerMissing(t, "Poppler pdftoppm is not installed");
   assert.deepEqual(colors.tl, [0, 255, 0], "patch must cover the visible top-left quadrant");
   for (const quadrant of [colors.tr, colors.bl, colors.br]) {
     assert.deepEqual(quadrant, [0, 0, 255], "only the cropped (blue) area may be visible");
@@ -275,7 +303,7 @@ test("wraps long patch text inside the patch, as the patch editor shows it", asy
   const file = path.join(workDir, "wrapped.pdf");
   await writeFile(file, await exportProject(projectWith(pdfs, [pdfRef("page", "s", 0, { patches: [patch] })])));
   const result = spawnSync("pdftotext", ["-bbox", file, "-"]);
-  if (result.error?.code === "ENOENT") return t.skip("Poppler pdftotext is not installed");
+  if (result.error?.code === "ENOENT") return popplerMissing(t, "Poppler pdftotext is not installed");
   const words = [...result.stdout.toString().matchAll(/xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)"/g)];
   const right = (patch.x + patch.w) * 612;
   assert.ok(words.length > 5);
@@ -301,7 +329,7 @@ test("keeps the source /Rotate on layered pages and places patches where the edi
   assert.equal((await PDFDocument.load(organizerTurn)).getPage(0).getRotation().angle, 180);
 
   const colors = await quadrantColors(bytes);
-  if (!colors) return t.skip("Poppler pdftoppm is not installed");
+  if (!colors) return popplerMissing(t, "Poppler pdftoppm is not installed");
   assert.deepEqual(colors.tl, [0, 255, 0], "patch must cover the top-left quadrant of the rotated view");
   for (const quadrant of [colors.tr, colors.bl, colors.br]) assert.deepEqual(quadrant, [255, 0, 0]);
 });
@@ -342,7 +370,7 @@ test("tints a page that paints its own opaque white sheet when Teñir la hoja is
 
   const before = await quadrantColors(under);
   const after = await quadrantColors(tinted);
-  if (!before || !after) return t.skip("Poppler pdftoppm is not installed");
+  if (!before || !after) return popplerMissing(t, "Poppler pdftoppm is not installed");
   assert.deepEqual(before.tl, [255, 255, 255], "a background below stays hidden by the opaque sheet");
   assert.deepEqual(after.tl, [244, 228, 225], "the white sheet takes the tint");
   assert.deepEqual(after.br, [0, 0, 0], "black content stays black");
@@ -362,7 +390,7 @@ for (const angle of [180, 270]) {
     const bytes = await exportProject(projectWith(pdfs, [pdfRef("page", "turned", 0, { background: "#fbf9f3", patches: [patch] })]));
     assert.equal((await PDFDocument.load(bytes)).getPage(0).getRotation().angle, angle);
     const colors = await quadrantColors(bytes);
-    if (!colors) return t.skip("Poppler pdftoppm is not installed");
+    if (!colors) return popplerMissing(t, "Poppler pdftoppm is not installed");
     assert.deepEqual(colors.tl, [0, 255, 0], "patch on the top-left of the rotated view");
     for (const quadrant of [colors.tr, colors.bl, colors.br]) assert.deepEqual(quadrant, [255, 0, 0]);
   });
@@ -380,7 +408,7 @@ test("tints a rotated source page and keeps its rotation", async (t) => {
   const bytes = await exportProject(projectWith(pdfs, [pdfRef("page", "turned", 0, { background: "#f4e4e1", tint: true })]));
   assert.equal((await PDFDocument.load(bytes)).getPage(0).getRotation().angle, 90);
   const colors = await quadrantColors(bytes);
-  if (!colors) return t.skip("Poppler pdftoppm is not installed");
+  if (!colors) return popplerMissing(t, "Poppler pdftoppm is not installed");
   for (const quadrant of [colors.tl, colors.tr, colors.bl, colors.br]) assert.deepEqual(quadrant, [244, 228, 225]);
 });
 
@@ -392,4 +420,61 @@ test("falls back to the MediaBox when the CropBox lies outside it", async () => 
   }];
   const output = await PDFDocument.load(await exportProject(projectWith(pdfs, [pdfRef("page", "badcrop", 0, { background: "#fbf9f3" })])));
   assert.deepEqual(output.getPage(0).getSize(), { width: 612, height: 792 });
+});
+
+test("vector-only input gains no image XObjects, checked without Poppler", async () => {
+  assert.equal(await imageXObjectCount(outputBytes), 0);
+});
+
+test("names a page reference that points past the end of its source, in Spanish", async () => {
+  const pdfs = [{ id: "two", name: "dos.pdf", bytesB64: await singlePagePdf() }];
+  await assert.rejects(
+    exportProject(projectWith(pdfs, [pdfRef("ok", "two", 0), pdfRef("bad", "two", 5)])),
+    /La página 2 apunta a la hoja 6 de "dos\.pdf", que solo tiene 1/
+  );
+});
+
+test("direct copy keeps a source /Rotate combined with the organizer rotation", async () => {
+  const pdfs = [{ id: "turned", name: "turned.pdf", bytesB64: await singlePagePdf((page) => page.setRotation(degrees(90))) }];
+  const bytes = await exportProject(projectWith(pdfs, [pdfRef("page", "turned", 0, { rotation: 90 })]));
+  const page = (await PDFDocument.load(bytes)).getPage(0);
+  assert.equal(page.getRotation().angle, 180);
+  assert.deepEqual(page.getSize(), { width: 612, height: 792 });
+  assert.equal(await imageXObjectCount(bytes), 0);
+});
+
+test("keeps Letter and A4 exact across several sources in interleaved order", async () => {
+  const a4 = async () => {
+    const source = await PDFDocument.create();
+    source.addPage([595.28, 841.89]);
+    return b64(await source.save());
+  };
+  const pdfs = [
+    { id: "letter", name: "letter.pdf", bytesB64: await singlePagePdf() },
+    { id: "a4", name: "a4.pdf", bytesB64: await a4() }
+  ];
+  const order = ["letter", "a4", "letter", "a4"];
+  const bytes = await exportProject(projectWith(pdfs, order.map((src, i) => pdfRef(`p${i}`, src, 0, i === 3 ? { background: "#fbf9f3" } : {}))));
+  const sizes = (await PDFDocument.load(bytes)).getPages().map((p) => p.getSize());
+  order.forEach((src, i) => {
+    const expected = src === "letter" ? [612, 792] : [595.28, 841.89];
+    assert.ok(Math.abs(sizes[i].width - expected[0]) < 0.01 && Math.abs(sizes[i].height - expected[1]) < 0.01, `page ${i + 1} keeps ${src}`);
+  });
+});
+
+test("tints only the visible CropBox of a cropped page", async (t) => {
+  const pdfs = [{
+    id: "cropped",
+    name: "cropped.pdf",
+    bytesB64: await singlePagePdf((page) => {
+      page.drawRectangle({ x: 0, y: 0, width: 612, height: 792, color: rgb(1, 1, 1) });
+      page.setCropBox(0, 0, 306, 396);
+    })
+  }];
+  const bytes = await exportProject(projectWith(pdfs, [pdfRef("page", "cropped", 0, { background: "#f4e4e1", tint: true })]));
+  assert.deepEqual((await PDFDocument.load(bytes)).getPage(0).getSize(), { width: 306, height: 396 });
+  assert.equal(await imageXObjectCount(bytes), 0);
+  const colors = await quadrantColors(bytes);
+  if (!colors) return popplerMissing(t, "Poppler pdftoppm is not installed");
+  for (const quadrant of [colors.tl, colors.tr, colors.bl, colors.br]) assert.deepEqual(quadrant, [244, 228, 225]);
 });

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useStation } from "../state/store";
 import { effectiveBackground, sourceFor } from "../engine/sources";
 import { getPageSizePt, renderPageDataUrl } from "../engine/thumbnails";
+import { useModalOpen } from "./Modal";
 import { Thumbnail } from "./Thumbnail";
 import type { PageRef } from "../../../shared/types";
 
@@ -17,6 +18,7 @@ const ZOOM_MAX = 3;
 export function ReaderView({ initialId, onClose }: { initialId: string; onClose: () => void }) {
   const { project, dispatch } = useStation();
   const pages = project.pages;
+  const modalOpen = useModalOpen();
 
   const [zoom, setZoom] = useState(1);
   const [current, setCurrent] = useState(() => Math.max(0, pages.findIndex((p) => p.id === initialId)));
@@ -40,16 +42,17 @@ export function ReaderView({ initialId, onClose }: { initialId: string; onClose:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Esc vuelve a la grilla
+  // Esc vuelve a la grilla (no con un diálogo abierto: ese Esc es del diálogo)
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (modalOpen) return;
       const t = e.target as HTMLElement;
       if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable) return;
       if (e.key === "Escape") onClose();
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, modalOpen]);
 
   // Scroll-spy: la página cuyo centro cruza el centro del viewport es la actual
   function onScroll() {
@@ -120,6 +123,8 @@ export function ReaderView({ initialId, onClose }: { initialId: string; onClose:
               style={{ borderColor: i === current ? "var(--accent)" : "transparent" }}
               onClick={() => jumpTo(i)}
               title={`Página ${i + 1}`}
+              aria-label={`Ir a la página ${i + 1}`}
+              aria-current={i === current ? "page" : undefined}
             >
               <Thumbnail
                 srcId={p.srcId}
@@ -129,6 +134,7 @@ export function ReaderView({ initialId, onClose }: { initialId: string; onClose:
                 background={effectiveBackground(project, p)}
                 tint={Boolean(p.tint)}
                 width={104}
+                lazy
               />
               <div className="text-[9px]" style={{ fontFamily: "var(--mono)", color: "var(--text-muted)" }}>
                 {i + 1}
@@ -166,32 +172,33 @@ export function ReaderView({ initialId, onClose }: { initialId: string; onClose:
           <span className="text-[10px]" style={{ fontFamily: "var(--mono)", color: "var(--text-label)" }}>
             {total === 0 ? "—" : `${current + 1}/${total}`}
           </span>
-          <button className="btn-ghost" title="Página anterior" disabled={current <= 0} onClick={() => jumpTo(current - 1)}>
+          <button className="btn-ghost" title="Página anterior" aria-label="Página anterior" disabled={current <= 0} onClick={() => jumpTo(current - 1)}>
             ∧
           </button>
           <button
             className="btn-ghost"
             title="Página siguiente"
+            aria-label="Página siguiente"
             disabled={current >= total - 1}
             onClick={() => jumpTo(current + 1)}
           >
             ∨
           </button>
           <div className="my-1 h-px w-6" style={{ background: "var(--border)" }} />
-          <button className="btn-ghost" title="Acercar" onClick={() => setZoom((z) => clampZoom(z * 1.2))}>
+          <button className="btn-ghost" title="Acercar" aria-label="Acercar" onClick={() => setZoom((z) => clampZoom(z * 1.2))}>
             ＋
           </button>
           <span className="text-[9px]" style={{ fontFamily: "var(--mono)", color: "var(--text-muted)" }}>
             {Math.round(zoom * 100)}%
           </span>
-          <button className="btn-ghost" title="Alejar" onClick={() => setZoom((z) => clampZoom(z / 1.2))}>
+          <button className="btn-ghost" title="Alejar" aria-label="Alejar" onClick={() => setZoom((z) => clampZoom(z / 1.2))}>
             −
           </button>
           <div className="my-1 h-px w-6" style={{ background: "var(--border)" }} />
-          <button className="btn-ghost" title="Ajustar al ancho" onClick={fitWidth}>
+          <button className="btn-ghost" title="Ajustar al ancho" aria-label="Ajustar al ancho" onClick={fitWidth}>
             ⤢
           </button>
-          <button className="btn-ghost" title="Página completa" onClick={fitPage}>
+          <button className="btn-ghost" title="Página completa" aria-label="Página completa" onClick={fitPage}>
             ▭
           </button>
         </div>
@@ -219,6 +226,8 @@ function ReaderPage({
   const [url, setUrl] = useState<string | null>(null);
   const [ratio, setRatio] = useState(792 / 612); // alto/ancho del PDF sin rotar (Letter por defecto)
   const [near, setNear] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
 
   const bytes = src?.bytes ?? null;
@@ -252,8 +261,13 @@ function ReaderPage({
   }, [scrollRoot]);
 
   useEffect(() => {
-    if (!near || !bytes) return;
+    if (!near) {
+      setUrl(null); // fuera de pantalla suelta su imagen; la hoja conserva su alto reservado
+      return;
+    }
+    if (!bytes) return;
     let alive = true;
+    setFailed(false);
     // Con fondo: render transparente, el color va debajo — idéntico a la exportación
     renderPageDataUrl(
       page.srcId,
@@ -263,12 +277,12 @@ function ReaderPage({
       background !== null && !tinted
     )
       .then((u) => alive && setUrl(u))
-      .catch(() => {});
+      .catch(() => alive && setFailed(true));
     return () => {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [near, bytes, page.srcId, page.pageIndex, width, ratio, page.rotation, background, tinted]);
+  }, [near, bytes, page.srcId, page.pageIndex, width, ratio, page.rotation, background, tinted, attempt]);
 
   const h = Math.round(rotated ? width / ratio : width * ratio);
   const imgW = rotated ? h : width;
@@ -292,6 +306,24 @@ function ReaderPage({
             transform: `translate(-50%,-50%) rotate(${page.rotation}deg)`
           }}
         />
+      )}
+      {failed && !url && (
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-center"
+          role="alert"
+          style={{ color: "#c0392b" }}
+        >
+          <span className="text-[12px]" style={{ fontFamily: "var(--mono)" }}>
+            No se pudo mostrar esta página
+          </span>
+          <button
+            className="btn-ghost"
+            aria-label={`Reintentar la página ${page.pageIndex + 1}`}
+            onClick={() => setAttempt((n) => n + 1)}
+          >
+            Reintentar
+          </button>
+        </div>
       )}
       {tinted && url && (
         <div className="pointer-events-none absolute inset-0" style={{ background: background!, mixBlendMode: "multiply" }} />

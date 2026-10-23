@@ -45,7 +45,8 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
 
   // Maqueta viva: compilar el PDF real tras 1s de pausa (contenido, estilo o página del proyecto)
   useEffect(() => {
-    if (!doc) return;
+    // En "solo editor" no hay maqueta que ver: el vigilante (useAutoRecompile) ya compila el mismo texto
+    if (!doc || view === "editor") return;
     const token = ++buildToken.current;
     const t = setTimeout(
       async () => {
@@ -69,7 +70,7 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
     );
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc?.preset, doc?.style, content, project.pageSize, project.margins]);
+  }, [doc?.preset, doc?.style, content, project.pageSize, project.margins, view]);
 
   // Limpieza de la maqueta efímera al desmontar
   useEffect(() => {
@@ -102,9 +103,9 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
     setError(null);
     try {
       const source = { ...doc, content };
-      const { compiledB64, previousPageCount, pageCount } = await compileDoc(source, project);
+      const { compiledB64, previousPageCount, pageCount, basedOnB64 } = await compileDoc(source, project);
       // La firma registra con qué texto y estilo se compiló: si algo cambia, el vigilante recompila
-      dispatch({ type: "setDocPages", docId, compiledB64, previousPageCount, pageCount, compiledSig: docSignature(source, project) });
+      dispatch({ type: "setDocPages", docId, compiledB64, previousPageCount, pageCount, basedOnB64, compiledSig: docSignature(source, project) });
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error desconocido al compilar.");
@@ -115,7 +116,13 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
 
   /** Insertar imágenes como <img> con URL file:// canónica (las relativas se rompen al compilar). */
   async function handleInsertImages() {
-    const imgs = await window.station.pickImagesDialog();
+    let imgs: Awaited<ReturnType<typeof window.station.pickImagesDialog>>;
+    try {
+      imgs = await window.station.pickImagesDialog();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudieron insertar las imágenes.");
+      return;
+    }
     if (imgs.length === 0) return;
     const snippet = imgs
       .map(
@@ -178,7 +185,7 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
   const editorArea = (framed: boolean) => (
     <textarea
       ref={textareaRef}
-      className={`h-full w-full resize-none text-[13px] leading-relaxed outline-none ${framed ? "px-7 py-6" : "p-6"}`}
+      className={`h-full w-full resize-none text-[13px] leading-relaxed ${framed ? "px-7 py-6" : "p-6"}`}
       style={{
         fontFamily: "var(--mono)",
         background: framed ? "transparent" : "var(--panel-bg)",
@@ -198,6 +205,7 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
       b64={previewB64}
       paperColor={style && style.bgColor.toLowerCase() !== "#ffffff" ? style.bgColor : null}
       pageRatio={project.pageSize === "a4" ? "210 / 297" : "17 / 22"}
+      failed={error !== null}
     />
   );
 
@@ -226,6 +234,8 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
               className={`btn-ghost${view === mode ? " btn-soft" : ""}`}
               style={view === mode ? { borderColor: "var(--accent)", background: "var(--accent-soft)" } : undefined}
               title={title}
+              aria-label={title}
+              aria-pressed={view === mode}
               onClick={() => onViewChange(mode)}
             >
               {icon}
@@ -238,6 +248,10 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
           style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
           value={doc.name}
           onChange={(e) => dispatch({ type: "updateDoc", docId, patch: { name: e.target.value } })}
+          onBlur={() => {
+            if (!doc.name.trim()) dispatch({ type: "updateDoc", docId, patch: { name: "Sin título" } });
+          }}
+          aria-label="Nombre del documento"
         />
 
         {building && (
@@ -355,15 +369,19 @@ function PreviewSheets({
   srcId,
   b64,
   paperColor,
-  pageRatio
+  pageRatio,
+  failed
 }: {
   srcId: string;
   b64: string | null;
   paperColor: string | null;
   pageRatio: string;
+  /** La última compilación falló: sin maqueta previa no hay nada que esperar */
+  failed: boolean;
 }) {
   const bytes = useMemo(() => (b64 ? b64ToBytes(b64) : null), [b64]);
   const [count, setCount] = useState(0);
+  const [loadError, setLoadError] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(680);
 
@@ -380,13 +398,18 @@ function PreviewSheets({
 
   useEffect(() => {
     let alive = true;
+    setLoadError(false);
     if (!bytes) {
       setCount(0);
       return;
     }
     getPageCount(srcId, bytes)
       .then((n) => alive && setCount(n))
-      .catch(() => {});
+      .catch(() => {
+        if (!alive) return;
+        setCount(0);
+        setLoadError(true);
+      });
     return () => {
       alive = false;
     };
@@ -395,8 +418,18 @@ function PreviewSheets({
   return (
     <div ref={boxRef} className="min-h-full px-6 py-5">
       {!bytes ? (
-        <p className="text-center text-[12px]" style={{ fontFamily: "var(--mono)", color: "var(--text-muted)" }}>
-          ◌ maquetando el documento…
+        failed ? (
+          <p className="text-center text-[12px]" role="alert" style={{ fontFamily: "var(--mono)", color: "var(--danger)" }}>
+            No se pudo maquetar el documento — el motivo está arriba.
+          </p>
+        ) : (
+          <p className="text-center text-[12px]" style={{ fontFamily: "var(--mono)", color: "var(--text-muted)" }}>
+            ◌ maquetando el documento…
+          </p>
+        )
+      ) : loadError ? (
+        <p className="text-center text-[12px]" role="alert" style={{ fontFamily: "var(--mono)", color: "var(--danger)" }}>
+          No se pudo mostrar la maqueta del documento. Revisa el texto o dale ⚡ Compilar para ver el error.
         </p>
       ) : (
         <div className="mx-auto flex w-fit flex-col gap-5">
@@ -452,7 +485,10 @@ function PreviewSheet({
   }, []);
 
   useEffect(() => {
-    if (!near) return;
+    if (!near) {
+      setUrl(null); // fuera de pantalla suelta su imagen; la hoja conserva su proporción
+      return;
+    }
     let alive = true;
     // Papel de color: render transparente + color debajo (idéntico a la capa de exportación)
     renderPageDataUrl(srcId, bytes, pageIndex, width, paperColor !== null)

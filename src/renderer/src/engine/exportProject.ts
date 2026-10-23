@@ -147,6 +147,16 @@ export async function exportProject(project: StationProject): Promise<Uint8Array
     }
   }
 
+  // Una referencia a una página que su fuente no tiene (proyecto editado a mano o truncado)
+  // se nombra en español antes de copiar, en vez de un error interno de pdf-lib
+  for (const [i, ref] of project.pages.entries()) {
+    const count = srcDocs.get(ref.srcId)!.getPageCount();
+    if (ref.pageIndex >= count) {
+      const name = project.pdfs.find((p) => p.id === ref.srcId)?.name ?? project.docs.find((d) => d.id === ref.srcId)?.name ?? ref.srcId;
+      throw new Error(`La página ${i + 1} apunta a la hoja ${ref.pageIndex + 1} de "${name}", que solo tiene ${count}. Bórrala del organizador y vuelve a agregarla.`);
+    }
+  }
+
   // Fondo efectivo: manual o el papel de color del doc (pinta la hoja completa,
   // márgenes incluidos — printToPDF los deja blancos, verificado 2026-07-02)
   const plans = project.pages.map((ref) => {

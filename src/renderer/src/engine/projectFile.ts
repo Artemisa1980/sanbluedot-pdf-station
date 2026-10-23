@@ -147,6 +147,11 @@ export function serialize(project: StationProject): string {
   return JSON.stringify(project);
 }
 
+/** Saltos de línea a \n y tabuladores a espacio: lo que el texto de un parche puede dibujar. */
+export function normalizePatchText(text: string): string {
+  return text.replace(/\r\n?/g, "\n").replace(/\t/g, " ");
+}
+
 export function deserialize(json: string): StationProject {
   let data: unknown;
   try {
@@ -157,6 +162,11 @@ export function deserialize(json: string): StationProject {
   repairLegacySizes(data);
   if (!validateProject(data)) {
     throw new Error("El archivo no es un proyecto .sbstation válido (estructura desconocida).");
+  }
+  // Texto de parches con saltos CRLF o tabuladores (pegado, editado en Windows): Helvetica
+  // no los dibuja, así que se normalizan al entrar al proyecto y la exportación no se traba
+  for (const page of data.pages) {
+    for (const patch of page.patches) patch.text = normalizePatchText(patch.text);
   }
   // Nota: proyectos guardados con el campo de firma viejo simplemente lo ignoran —
   // la firma ahora vive únicamente dentro del contenido de cada documento.

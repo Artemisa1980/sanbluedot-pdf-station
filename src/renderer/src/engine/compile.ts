@@ -107,14 +107,21 @@ export async function compileDocRaw(doc: SourceDoc, project: StationProject): Pr
 export async function compileDoc(
   doc: SourceDoc,
   project: StationProject
-): Promise<{ compiledB64: string; previousPageCount: number; pageCount: number }> {
-  const previousPageCount = doc.compiledB64
-    ? (await PDFDocument.load(b64ToBytes(doc.compiledB64))).getPageCount()
-    : 0;
+): Promise<{ compiledB64: string; previousPageCount: number | null; pageCount: number; basedOnB64: string | null }> {
+  // Un PDF anterior dañado no puede impedir recompilar: null = conteo desconocido
+  // (reconcileDocPages lo deduce de las páginas que siguen en el organizador)
+  let previousPageCount: number | null = 0;
+  if (doc.compiledB64) {
+    try {
+      previousPageCount = (await PDFDocument.load(b64ToBytes(doc.compiledB64))).getPageCount();
+    } catch {
+      previousPageCount = null;
+    }
+  }
   const compiledB64 = await compileDocRaw(doc, project);
   const pdf = await PDFDocument.load(b64ToBytes(compiledB64));
   // Invalidar miniaturas y bytes viejos del doc — la versión anterior ya no existe
   evictSource(doc.id);
   evictBytes(doc.id);
-  return { compiledB64, previousPageCount, pageCount: pdf.getPageCount() };
+  return { compiledB64, previousPageCount, pageCount: pdf.getPageCount(), basedOnB64: doc.compiledB64 };
 }

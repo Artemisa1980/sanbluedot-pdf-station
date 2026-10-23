@@ -27,11 +27,12 @@ are everything needed to build, test and release it.
 | Command | What it proves |
 |---|---|
 | `npm install` | Dependencies. npm 12 blocks install scripts; Electron downloads its binary on first run (`node node_modules/electron/install.js` forces it). |
-| `npm test` | Regression suites: page reconciliation, project schema, reducer, compiled HTML and staleness, formulas, vector export. |
+| `npm test` | Regression suites: page reconciliation, project schema, reducer, compiled HTML and staleness, formulas, vector export, main-process rules, thumbnail cache. Set `CI=1` to fail instead of skipping when Poppler is missing. |
 | `npm run lint` | TypeScript, renderer and main/preload projects. |
 | `npm run build` | Production bundle in `out/`. |
 | `npm run dev` | Development app with hot reload. Changes under `src/main/` or `src/preload/` restart Electron and drop an unsaved project. |
 | `npm run dist:mac` / `npm run dist:win` | Installers in `release/`. The Windows installer must be tested on Windows. |
+| `npm run dist:win:zip` | Portable Windows x64 zip in `release/`. Use it on Apple silicon without Rosetta 2, where the NSIS builder (`makensis`, x86_64 only) cannot run. Test it on Windows. |
 
 Tests need Node 22.18 or newer, because some suites import TypeScript files directly.
 The rendering checks call Poppler (`pdftoppm`, `pdftotext`, `pdfimages`) and skip

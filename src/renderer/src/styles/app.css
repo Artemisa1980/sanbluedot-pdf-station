@@ -9,13 +9,11 @@
   --panel-bg: #f8eccf;
   --panel-header: #98aab2;
   --border: #16213e;
-  --border-hover: #7cb3e8;
   --text: #16213e;
   --text-muted: #405147;
   --text-label: #16213e;
   --accent: #7cb3e8; /* dot blue — SIEMPRE */
   --accent-soft: rgba(124, 179, 232, 0.12);
-  --accent-hover: #93c4f0;
   --gold: #efc15e;
   --navy: #16213e;
   --danger: #c0392b;
@@ -26,11 +24,6 @@
   --control-danger-bg: #8a615a;
   --control-danger-text: #fff7ef;
   --dropzone-bg: #dce6d6;
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
-  --radius: 8px;
-  --radius-sm: 5px;
   --scrollbar: rgba(22, 33, 62, 0.35);
   /* Retro dev-station: bordes marcados + sombra dura (referencias de Sandy 2026-07-02) */
   --border-strong: #16213e;
@@ -59,13 +52,10 @@
   --control-bg: #1a211d;
   --control-text: #9aaa9e;
   --control-danger-bg: rgba(192, 57, 43, 0.08);
-  --control-danger-text: #c0392b;
+  --control-danger-text: #ff7b6b; /* 6.49:1 sobre --panel-bg #1a211d (antes #c0392b ≈ 3.0:1) */
   --dropzone-bg: #222b25;
-  --danger: #c0392b;
+  --danger: #ff7b6b; /* 6.49:1 sobre --panel-bg #1a211d, 5.76:1 sobre --panel-header y --input-bg (antes #c0392b ≈ 3.0:1) */
   --danger-soft: rgba(192, 57, 43, 0.08);
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.25);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.35);
   --scrollbar: rgba(124, 179, 232, 0.3);
   --border-strong: rgba(124, 179, 232, 0.45);
   --shadow-ink: rgba(0, 0, 0, 0.55);
@@ -76,6 +66,20 @@ body {
   color: var(--text);
   font-family: var(--sans);
   transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Anillo de foco único para teclado: botones, tarjetas de página, campos y selects.
+   (Sin esto Tailwind dejaba el foco invisible; el textarea del editor ya no usa outline-none.) */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* El diálogo recibe foco programático como respaldo: no necesita anillo */
+[role="dialog"]:focus { outline: none; }
+/* El selector de color personalizado es un input invisible dentro de su etiqueta: el anillo va en la etiqueta */
+.swatch-custom:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -109,7 +113,6 @@ body {
   background: var(--navy);
 }
 .app-identity { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
-.app-logo { width: 48px; height: 48px; flex: 0 0 48px; user-select: none; }
 .app-identity-copy { display: grid; gap: 5px; min-width: 176px; }
 .app-identity-title {
   display: flex;
@@ -329,7 +332,6 @@ body {
 .dark .empty-canvas { background: var(--app-bg); }
 
 @media (max-width: 1120px) {
-  .app-logo { width: 40px; height: 40px; flex-basis: 40px; }
   .app-identity-copy { min-width: 142px; }
   .app-identity-title { font-size: 10px; }
   .app-product-name { font-size: 8px; }

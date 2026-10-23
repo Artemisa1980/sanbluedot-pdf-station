@@ -47,8 +47,15 @@ export function useDraftAutosave(
       // Escribe solo con cambios sin guardar Y si el proyecto cambió desde la última vez
       if (!s.dirty || lastWritten.current === s.project) return;
       lastWritten.current = s.project;
-      const json = serialize(s.project);
-      const meta = { name: s.project.name, filePath: s.currentPath };
+      let json: string;
+      try {
+        json = serialize(s.project);
+      } catch {
+        lastWritten.current = null; // no se pudo serializar → reintenta en el próximo tick
+        return;
+      }
+      // main rechaza nombres de más de 500 caracteres: se recorta aquí para que el autosave siga
+      const meta = { name: s.project.name.slice(0, 500), filePath: s.currentPath };
       queue.current = queue.current
         .then(() => window.station.draftWrite(json, meta))
         .catch(() => {

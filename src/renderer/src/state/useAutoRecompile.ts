@@ -74,10 +74,10 @@ export function useAutoRecompile(onError: (msg: string) => void): { busy: Set<st
     const sig = docSignature(doc, proj);
     inFlight.current.set(docId, (inFlight.current.get(docId) ?? 0) + 1);
     try {
-      const { compiledB64, previousPageCount, pageCount } = await compileDoc(doc, proj);
+      const { compiledB64, previousPageCount, pageCount, basedOnB64 } = await compileDoc(doc, proj);
       if (currentSig(docId) !== sig) return; // el doc cambió mientras compilaba: resultado viejo
       failed.current.delete(docId);
-      dispatch({ type: "setDocPages", docId, compiledB64, previousPageCount, pageCount, compiledSig: sig });
+      dispatch({ type: "setDocPages", docId, compiledB64, previousPageCount, pageCount, basedOnB64, compiledSig: sig });
     } catch (e) {
       if (currentSig(docId) === sig) {
         failed.current.set(docId, sig);

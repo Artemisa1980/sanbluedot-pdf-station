@@ -58,3 +58,10 @@ test("first compilation creates every page", () => {
 test("an entirely deleted document stays absent when its page count is unchanged", () => {
   assert.deepEqual(reconcile([page("p1", "pdf", 0)], 3, 3).map((item) => item.id), ["p1"]);
 });
+
+test("an unreadable previous PDF keeps earlier deletions deleted", () => {
+  // Pages 0 and 2 survive, page 1 was deleted; the old PDF is damaged, so its count is unknown
+  const pages = [page("d0", "doc", 0), page("d2", "doc", 2)];
+  const result = reconcile(pages, null, 4);
+  assert.deepEqual(result.map((p) => [p.srcId, p.pageIndex]), [["doc", 0], ["doc", 2], ["doc", 3]]);
+});

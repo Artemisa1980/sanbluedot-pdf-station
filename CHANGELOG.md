@@ -2,6 +2,64 @@
 
 Earlier versions are described in the [GitHub Releases](https://github.com/Artemisa1980/sanbluedot-pdf-station/releases).
 
+## 1.11.1
+
+### Changed
+
+- The header no longer shows the round logo image; the identity starts with
+  `SANDY.SYSDEV`. The app icon in the Dock, installer and Windows is unchanged.
+
+## 1.11.0 — unreleased
+
+PDF output is unchanged: the same documents export byte-identical pages, sizes, fonts
+and text as in 1.10.1.
+
+### Fixed
+
+- A recovery draft can no longer make Save write to a file the user never chose, and a
+  failed Open no longer leaves that file as the save target.
+- A damaged recovery draft is discarded instead of being offered again on every launch.
+- A project page pointing past the end of its source is named in Spanish at export
+  instead of failing with an internal error.
+- A damaged previous compilation no longer blocks recompiling, and recompiling never
+  brings back pages that were deleted on purpose.
+- Two compilations of the same document finishing in a row no longer re-add deleted pages.
+- Patch text with Windows line breaks or tabs no longer blocks the export.
+- Delete, Backspace and Cmd+A no longer act on hidden pages while a dialog is open;
+  Cmd+O and Cmd+S are ignored while a dialog is open; Esc closes only the top dialog.
+- A second PDF in the import queue no longer inherits the first one's page selection,
+  and the queue is emptied on Nuevo and Abrir.
+- Nuevo and Abrir are refused with a message while an export is running.
+- The reader and editor previews release page images that leave the screen; thumbnail
+  memory is bounded by size, and thumbnails are keyed by the full page content, so a
+  recompiled page never reuses the old image.
+- Failed thumbnails, reader pages, previews, imports and dialogs show a Spanish message
+  with a retry where it applies, instead of an endless placeholder or silence.
+- A plain click on the page no longer erases the patch rectangle, and the patch size
+  field accepts typing and stays within 6–72 pt.
+- Shift-click selects from the first clicked page; empty project and document names
+  fall back to "Sin título"; changing the base style asks before discarding edits.
+- Compilation runs at most two hidden print windows at a time and fails at once if one
+  crashes. The packaged app ignores the development server variable and also blocks
+  `ftp:` requests.
+
+### Accessibility
+
+- Dialogs trap focus, close with Esc and return focus; page cards and source rows work
+  from the keyboard (Alt+Arrow reorders a page); every icon button has a Spanish label;
+  a shared focus ring; error notices stay until closed and are announced; the dark
+  theme's danger color meets 4.5:1 contrast.
+
+### Development
+
+- Tests for the main-process rules, thumbnails and the new export cases (72 in total);
+  the vector tests fail instead of skipping when `CI` is set without Poppler.
+- The production build fails if its content-security policy still allows `localhost`.
+- Renderer libraries are build-time dependencies: Vite already bundles them, so the
+  installer no longer ships a second copy (the app archive drops from 92 MB to 5.5 MB).
+- Electron 43.7.7 → 43.8.3 (patch release); export output verified identical.
+- `npm run dist:win:zip` builds the portable Windows zip on Apple silicon.
+
 ## 1.10.1
 
 ### Fixed

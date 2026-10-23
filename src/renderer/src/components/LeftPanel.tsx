@@ -1,4 +1,4 @@
-import { useState, type DragEvent } from "react";
+import { useId, useState, type DragEvent } from "react";
 import { newId, useStation } from "../state/store";
 import { bytesFor, evictBytes } from "../engine/bytesCache";
 import { evictSource } from "../engine/thumbnails";
@@ -64,6 +64,10 @@ const SWATCHES: Array<{ label: string; color: string }> = [
 ];
 
 interface Props {
+  /** Proyecto para el que se montó el panel; sube en Nuevo/Abrir/restaurar */
+  projectEpoch: number;
+  /** Proyecto abierto ahora mismo (lee el valor actual, no el del render) */
+  currentProjectEpoch: () => number;
   editingDocId: string | null;
   onOpenDoc: (docId: string, view?: "editor" | "preview") => void;
   /** Click en un PDF de la cola → vista lectura en esa página */
@@ -75,7 +79,7 @@ interface Props {
 }
 
 /** Panel izquierdo único: proyecto + cola de documentos + control estético. */
-export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, onError, recompiling }: Props) {
+export function LeftPanel({ projectEpoch, currentProjectEpoch, editingDocId, onOpenDoc, onOpenPdf, onError, recompiling }: Props) {
   const { project, selection, dispatch } = useStation();
   const [queue, setQueue] = useState<ImportedPdf[]>([]);
   const [dragOver, setDragOver] = useState(false);
@@ -99,8 +103,13 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, onError, recompi
   }
 
   /** Un PDF protegido o dañado se avisa al importarlo, no al final con la exportación fallida. */
+  // Una importación que sigue en vuelo después de Nuevo/Abrir no debe agregar archivos
+  // al proyecto recién abierto. Cerrar el panel no la corta: el proyecto es el mismo
+  const sameProject = () => currentProjectEpoch() === projectEpoch;
+
   async function queuePdf(name: string, bytes: Uint8Array, bytesB64: string) {
     const problem = await pdfImportProblem(bytes);
+    if (!sameProject()) return;
     if (problem) {
       onError(`"${name}" ${problem}`);
       return;
@@ -109,17 +118,28 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, onError, recompi
   }
 
   async function handlePick() {
-    const files = await window.station.importFilesDialog();
+    let files: Awaited<ReturnType<typeof window.station.importFilesDialog>>;
+    try {
+      files = await window.station.importFilesDialog();
+    } catch (e) {
+      onError(`No se pudo abrir el selector de archivos: ${e instanceof Error ? e.message : "error desconocido"}`);
+      return;
+    }
     let firstDoc: string | null = null;
     for (const f of files) {
-      if (f.kind === "pdf") {
-        await queuePdf(f.name, b64ToBytes(f.bytesB64), f.bytesB64);
-      } else {
-        const id = addDocFromFile(f.name, f.kind, f.content);
-        if (!firstDoc) firstDoc = id;
+      if (!sameProject()) return;
+      try {
+        if (f.kind === "pdf") {
+          await queuePdf(f.name, b64ToBytes(f.bytesB64), f.bytesB64);
+        } else {
+          const id = addDocFromFile(f.name, f.kind, f.content);
+          if (!firstDoc) firstDoc = id;
+        }
+      } catch (e) {
+        onError(`No se pudo importar "${f.name}": ${e instanceof Error ? e.message : "error desconocido"}`);
       }
     }
-    if (firstDoc) onOpenDoc(firstDoc, "preview");
+    if (firstDoc && sameProject()) onOpenDoc(firstDoc, "preview");
   }
 
   async function handleDrop(e: DragEvent) {
@@ -127,16 +147,23 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, onError, recompi
     setDragOver(false);
     let firstDoc: string | null = null;
     for (const file of Array.from(e.dataTransfer.files)) {
-      if (/\.pdf$/i.test(file.name)) {
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        await queuePdf(file.name, bytes, bytesToB64(bytes));
-      } else if (/\.(md|markdown|html?|htm)$/i.test(file.name)) {
-        const kind = /\.(html?|htm)$/i.test(file.name) ? "html" : "md";
-        const id = addDocFromFile(file.name, kind, await file.text());
-        if (!firstDoc) firstDoc = id;
+      if (!sameProject()) return;
+      try {
+        if (/\.pdf$/i.test(file.name)) {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          await queuePdf(file.name, bytes, bytesToB64(bytes));
+        } else if (/\.(md|markdown|html?|htm)$/i.test(file.name)) {
+          const kind = /\.(html?|htm)$/i.test(file.name) ? "html" : "md";
+          const id = addDocFromFile(file.name, kind, await file.text());
+          if (!firstDoc) firstDoc = id;
+        } else {
+          onError(`"${file.name}" no se puede importar: solo PDF, Markdown (.md) o HTML.`);
+        }
+      } catch (err) {
+        onError(`No se pudo importar "${file.name}": ${err instanceof Error ? err.message : "error desconocido"}`);
       }
     }
-    if (firstDoc) onOpenDoc(firstDoc, "preview");
+    if (firstDoc && sameProject()) onOpenDoc(firstDoc, "preview");
   }
 
   function createDoc(kind: "md" | "html") {
@@ -246,6 +273,10 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, onError, recompi
           style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
           value={project.name}
           onChange={(e) => dispatch({ type: "setName", value: e.target.value })}
+          onBlur={() => {
+            if (!project.name.trim()) dispatch({ type: "setName", value: "Sin título" });
+          }}
+          aria-label="Nombre del proyecto"
           title="Nombre del proyecto"
         />
         <div className="mt-2 flex items-center gap-2">
@@ -301,7 +332,16 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, onError, recompi
 
         <div
           className={`dropzone tip flex flex-col items-center justify-center gap-1 px-3 py-4 text-center ${dragOver ? "drag-over" : ""}`}
+          role="button"
+          tabIndex={0}
+          aria-label="Subir archivos: PDF, Markdown o HTML"
           onClick={handlePick}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              void handlePick();
+            }
+          }}
           onDragOver={(e) => {
             e.preventDefault();
             setDragOver(true);
@@ -324,25 +364,41 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, onError, recompi
               const inUse = project.pages.filter((p) => p.srcId === s.id).length;
               const orderIdx = sourceOrder.indexOf(s.id);
               const firstPage = project.pages.find((p) => p.srcId === s.id);
-              const clickable = s.isDoc || Boolean(firstPage);
-              return (
-                <li
-                  key={s.id}
-                  className={`group flex items-center gap-1.5 rounded-md border px-1.5 py-1.5 ${clickable ? "cursor-pointer" : ""}`}
-                  style={{ borderColor: "var(--border)", background: "var(--panel-bg)" }}
-                  onClick={
-                    s.isDoc
-                      ? () => onOpenDoc(s.id, "preview")
-                      : firstPage
-                        ? () => onOpenPdf(firstPage.id)
-                        : undefined
-                  }
-                  title={s.isDoc ? "Abrir en el editor" : firstPage ? "Ver en la vista lectura" : s.name}
-                >
+              const openSource = s.isDoc
+                ? () => onOpenDoc(s.id, "preview")
+                : firstPage
+                  ? () => onOpenPdf(firstPage.id)
+                  : undefined;
+              const rowTitle = s.isDoc ? "Abrir en el editor" : firstPage ? "Ver en la vista lectura" : s.name;
+              const rowLabel = (
+                <>
                   <span className={`chip shrink-0 chip-${s.kind.toLowerCase()}`}>{s.kind}</span>
                   <span className="min-w-0 flex-1 truncate text-[12px]" title={s.name}>
                     {s.name}
                   </span>
+                </>
+              );
+              return (
+                <li
+                  key={s.id}
+                  className="group flex items-center gap-1.5 rounded-md border px-1.5 py-1.5"
+                  style={{ borderColor: "var(--border)", background: "var(--panel-bg)" }}
+                >
+                  {/* Un botón real: Tab lo alcanza y Enter/Espacio lo abren */}
+                  {openSource ? (
+                    <button
+                      className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 text-left"
+                      onClick={openSource}
+                      title={rowTitle}
+                      aria-label={`${rowTitle}: ${s.name}`}
+                    >
+                      {rowLabel}
+                    </button>
+                  ) : (
+                    <div className="flex min-w-0 flex-1 items-center gap-1.5" title={rowTitle}>
+                      {rowLabel}
+                    </div>
+                  )}
                   <span
                     className="shrink-0 text-[9px]"
                     style={{ fontFamily: "var(--mono)", color: "var(--text-muted)" }}
@@ -354,6 +410,7 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, onError, recompi
                     className="shrink-0 rounded px-0.5 text-[11px] disabled:opacity-25"
                     style={{ color: "var(--text-label)" }}
                     title="Subir capítulo completo"
+                    aria-label={`Subir el capítulo ${s.name}`}
                     disabled={orderIdx <= 0}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -366,6 +423,7 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, onError, recompi
                     className="shrink-0 rounded px-0.5 text-[11px] disabled:opacity-25"
                     style={{ color: "var(--text-label)" }}
                     title="Bajar capítulo completo"
+                    aria-label={`Bajar el capítulo ${s.name}`}
                     disabled={orderIdx === -1 || orderIdx >= sourceOrder.length - 1}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -375,9 +433,10 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, onError, recompi
                     ↓
                   </button>
                   <button
-                    className="shrink-0 rounded px-0.5 text-[12px] opacity-0 transition-opacity group-hover:opacity-100"
+                    className="shrink-0 rounded px-0.5 text-[12px] opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100"
                     style={{ color: "var(--danger)" }}
                     title="Eliminar fuente"
+                    aria-label={`Eliminar la fuente ${s.name}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       removeSource(s.id, s.name);
@@ -430,11 +489,13 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, onError, recompi
                       boxShadow: s.color === sharedBg ? "0 0 0 2px var(--accent)" : undefined
                     }}
                     title={s.label}
+                    aria-label={`Fondo ${s.label}`}
+                    aria-pressed={s.color === sharedBg}
                     onClick={() => dispatch({ type: "setBackground", ids: selection, color: s.color })}
                   />
                 ))}
                 <label
-                  className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border-2 text-[11px]"
+                  className="swatch-custom flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border-2 text-[11px]"
                   style={{ borderColor: "var(--accent)", color: "var(--text)" }}
                   title="Color personalizado"
                 >
@@ -442,6 +503,7 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, onError, recompi
                   <input
                     type="color"
                     className="h-0 w-0 opacity-0"
+                    aria-label="Color de fondo personalizado"
                     value={sharedBg ?? "#ffffff"}
                     onChange={(e) => dispatch({ type: "setBackground", ids: selection, color: e.target.value })}
                   />
@@ -534,6 +596,7 @@ export function LeftPanel({ editingDocId, onOpenDoc, onOpenPdf, onError, recompi
 
       {current && (
         <PagePicker
+          key={current.id} /* remonta por PDF — el conteo y la selección no se heredan del anterior */
           name={current.name}
           srcId={current.id}
           bytes={bytesFor(current.id, current.bytesB64)}
@@ -576,14 +639,18 @@ function ColorField({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const id = useId();
   return (
     <div className="min-w-0 flex-1">
-      <label className="section-label">{label}</label>
+      <label className="section-label" htmlFor={id}>
+        {label}
+      </label>
       <div
         className="mt-1 flex items-center gap-1.5 rounded border px-1.5 py-1"
         style={{ background: "var(--input-bg)", borderColor: "var(--border)" }}
       >
         <input
+          id={id}
           type="color"
           className="h-6 w-7 shrink-0 cursor-pointer border-0 bg-transparent p-0"
           value={value}
@@ -624,13 +691,21 @@ function DocStyleControls({
           className="btn-ghost mt-1 w-full"
           style={{ background: "var(--control-bg)" }}
           value={doc.preset}
-          onChange={(e) =>
+          onChange={(e) => {
+            // Cambiar de base reemplaza TODOS los ajustes granulares: pedir permiso si hay alguno propio
+            const edited = JSON.stringify(style) !== JSON.stringify(presetById(doc.preset).base);
+            if (
+              edited &&
+              !window.confirm("Cambiar el estilo base reemplaza los colores, la tipografía y los tamaños que ajustaste en este documento. ¿Continuar?")
+            ) {
+              return; // el select es controlado: vuelve solo al estilo actual
+            }
             dispatch({
               type: "updateDoc",
               docId: doc.id,
               patch: { preset: e.target.value, style: presetById(e.target.value).base }
-            })
-          }
+            });
+          }}
         >
           {PRESETS.map((p) => (
             <option key={p.id} value={p.id}>
@@ -793,6 +868,7 @@ function MyStylesBlock({ doc, style }: { doc: SourceDoc; style: DocStyle }) {
             className="btn-ghost min-w-0 flex-1"
             style={{ background: "var(--control-bg)" }}
             value={selectedId}
+            aria-label="Aplicar un estilo guardado"
             onChange={(e) => choose(e.target.value)}
           >
             <option value="">Aplicar un estilo…</option>
@@ -807,6 +883,7 @@ function MyStylesBlock({ doc, style }: { doc: SourceDoc; style: DocStyle }) {
               className="shrink-0 rounded px-1 text-[12px]"
               style={{ color: "var(--danger)" }}
               title="Borrar el estilo elegido (tus documentos no cambian)"
+              aria-label="Borrar el estilo elegido"
               onClick={handleDelete}
             >
               ✕
@@ -822,6 +899,7 @@ function MyStylesBlock({ doc, style }: { doc: SourceDoc; style: DocStyle }) {
             className="min-w-0 flex-1 rounded border px-2 py-1 text-[12px]"
             style={{ background: "var(--input-bg)", borderColor: "var(--border)", color: "var(--text)" }}
             placeholder="Nombre del estilo…"
+            aria-label="Nombre del estilo"
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => {
@@ -829,7 +907,12 @@ function MyStylesBlock({ doc, style }: { doc: SourceDoc; style: DocStyle }) {
               if (e.key === "Escape") setNaming(false);
             }}
           />
-          <button className="btn-ghost shrink-0" disabled={!name.trim()} onClick={handleSave}>
+          <button
+            className="btn-ghost shrink-0"
+            disabled={!name.trim()}
+            onClick={handleSave}
+            aria-label="Guardar el estilo con este nombre"
+          >
             ✓
           </button>
         </div>

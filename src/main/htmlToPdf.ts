@@ -2,6 +2,7 @@ import { BrowserWindow, session, type Session } from "electron";
 import { writeFile, rm } from "fs/promises";
 import { tmpdir } from "os";
 import path from "path";
+import { createLimiter, NETWORK_URL_PATTERNS } from "./guards";
 
 /** Márgenes en pulgadas (printToPDF los exige así): compact = 18mm arriba/abajo + 20mm izq/der; APA = 1" los cuatro. */
 const MARGINS = {
@@ -10,6 +11,11 @@ const MARGINS = {
 } as const;
 
 const COMPILE_TIMEOUT_MS = 120_000;
+/** Ventanas de impresión simultáneas como máximo: cada una es un proceso de Chromium */
+const MAX_PARALLEL_COMPILES = 2;
+/** Tope del HTML: imágenes van por file:// y fuentes embebidas pesan pocos MB */
+const MAX_HTML_CHARS = 50_000_000;
+const compileSlot = createLimiter(MAX_PARALLEL_COMPILES);
 
 let isolatedCompileSession: Session | null = null;
 
@@ -19,7 +25,7 @@ function compileSession(): Session {
   // Defensa adicional a la CSP: la compilación acepta recursos file:/data: locales,
   // pero nunca necesita HTTP(S), incluso si el HTML importado intenta pedirlo.
   isolated.webRequest.onBeforeRequest(
-    { urls: ["http://*/*", "https://*/*"] },
+    { urls: NETWORK_URL_PATTERNS },
     (_details, callback) => callback({ cancel: true })
   );
   // Un documento importado no pide permisos (cámara, notificaciones…): se niegan todos
@@ -41,6 +47,12 @@ export interface HtmlToPdfOptions {
  * Nunca rasteriza: el texto sale seleccionable, igual que la extensión yzane.
  */
 export async function htmlToPdf(html: string, opts: HtmlToPdfOptions): Promise<Buffer> {
+  if (html.length > MAX_HTML_CHARS) throw new Error("El documento es demasiado grande para compilarse.");
+  // El reloj de 2 minutos corre desde que la compilación tiene turno, no mientras espera
+  return compileSlot(() => printHtml(html, opts));
+}
+
+async function printHtml(html: string, opts: HtmlToPdfOptions): Promise<Buffer> {
   const tmp = path.join(tmpdir(), `station-compile-${Date.now()}-${Math.random().toString(36).slice(2)}.html`);
   await writeFile(tmp, html, "utf-8");
   const win = new BrowserWindow({
@@ -73,6 +85,11 @@ export async function htmlToPdf(html: string, opts: HtmlToPdfOptions): Promise<B
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new Error("La compilación tardó más de 2 minutos y se canceló.")), COMPILE_TIMEOUT_MS);
+    // Si la ventana oculta muere o su documento no carga, se falla ya, sin esperar el reloj
+    win.webContents.once("render-process-gone", () => reject(new Error("La compilación se interrumpió; vuelve a intentarlo.")));
+    win.webContents.on("did-fail-load", (_event, _code, description, _url, isMainFrame) => {
+      if (isMainFrame) reject(new Error(`No se pudo cargar el documento para compilarlo (${description}).`));
+    });
   });
   print.catch(() => {}); // un rechazo tardío, tras el timeout, no queda sin manejar
   try {

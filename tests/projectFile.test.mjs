@@ -93,3 +93,11 @@ test("accepts the optional compiled signature and rejects a non-string one", () 
   withDoc.docs[0].compiledSig = 7;
   assert.throws(() => deserialize(JSON.stringify(withDoc)), /estructura desconocida/);
 });
+
+test("normalizes CRLF and tabs in patch text on load", () => {
+  const withPatch = structuredClone(validProject);
+  withPatch.pages[0].patches.push({
+    id: "patch-1", x: 0, y: 0, w: 0.5, h: 0.5, color: "#ffffff", text: "uno\r\ndos\rtres\tcuatro", textColor: "#000000", fontSize: 12
+  });
+  assert.equal(deserialize(JSON.stringify(withPatch)).pages[0].patches[0].text, "uno\ndos\ntres cuatro");
+});

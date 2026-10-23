@@ -89,3 +89,19 @@ test("user messages drop Electron's English IPC prefix", async () => {
   );
   assert.equal(cleanErrorText("Proyecto guardado."), "Proyecto guardado.");
 });
+
+test("a damaged previous PDF never blocks recompiling", async () => {
+  const { PDFDocument } = await import("pdf-lib");
+  const fresh = await PDFDocument.create();
+  fresh.addPage([612, 792]);
+  const freshB64 = Buffer.from(await fresh.save()).toString("base64");
+  globalThis.window = { station: { htmlToPdf: async () => freshB64 } };
+  try {
+    const result = await compile.compileDoc(doc({ compiledB64: "bm90IGEgcGRm" }), project);
+    assert.equal(result.previousPageCount, null, "unknown count, resolved later from the organizer");
+    assert.equal(result.pageCount, 1);
+    assert.equal(result.basedOnB64, "bm90IGEgcGRm");
+  } finally {
+    delete globalThis.window;
+  }
+});

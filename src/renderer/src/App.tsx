@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { DocEditor, type EditorView } from "./components/DocEditor";
 import { LeftPanel } from "./components/LeftPanel";
+import { ModalProvider, useModalOpen } from "./components/Modal";
 import { Organizer } from "./components/Organizer";
 import { exportProject } from "./engine/exportProject";
 import { deserialize, serialize } from "./engine/projectFile";
@@ -11,7 +12,6 @@ import { useAutoRecompile } from "./state/useAutoRecompile";
 import { useDraftAutosave } from "./state/useDraftAutosave";
 import { bytesToB64 } from "../../shared/b64";
 import { cleanErrorText } from "./engine/errorText";
-import badgeUrl from "./assets/sanblue-badge.png";
 
 declare const __APP_VERSION__: string;
 
@@ -24,16 +24,31 @@ function useTheme() {
   return { dark, toggle: () => setDark((d) => !d) };
 }
 
+/** El proveedor de modales va por encima de AppShell: los atajos de aquí leen si hay uno abierto. */
 export default function App() {
+  return (
+    <ModalProvider>
+      <AppShell />
+    </ModalProvider>
+  );
+}
+
+function AppShell() {
   const { dark, toggle } = useTheme();
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [editorView, setEditorView] = useState<EditorView>("ambos");
   const [readerAt, setReaderAt] = useState<string | null>(null); // abrir lectura en esta página
   const [showPanel, setShowPanel] = useState(true);
+  // Sube en cada Nuevo/Abrir/restaurar: remonta el panel izquierdo y vacía su cola de importación
+  const [projectEpoch, setProjectEpoch] = useState(0);
+  const projectEpochRef = useRef(projectEpoch);
+  projectEpochRef.current = projectEpoch;
+  const modalOpen = useModalOpen();
   const { project, dirty, dispatch } = useStation();
   const projectRef = useRef(project);
   projectRef.current = project;
   const saveInFlight = useRef(false);
+  const exportInFlight = useRef(false); // Nuevo/Abrir limpian cachés: no mientras una exportación las usa
   const [saving, setSaving] = useState(false);
   // Estilos vivos: recompila solo los docs cuyo estilo cambió, en cualquier vista
   const recompiling = useAutoRecompile((msg) => showToast("error", msg));
@@ -44,12 +59,14 @@ export default function App() {
   // borraría el borrador que estamos por ofrecer (dirty nace en false)
   const [draftReady, setDraftReady] = useState(false);
 
-  // Un aviso nuevo reinicia el reloj: el temporizador del anterior ya no lo cierra antes de sus 5 s
+  // Un aviso nuevo reinicia el reloj: el temporizador del anterior ya no lo cierra antes de sus 5 s (solo los "ok" caducan)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   function showToast(kind: "ok" | "error", msg: string) {
     setToast({ kind, msg: cleanErrorText(msg) });
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 5000);
+    toastTimer.current = null;
+    // Los errores se quedan hasta que se cierran: 5 s no alcanzan para leerlos
+    if (kind === "ok") toastTimer.current = setTimeout(() => setToast(null), 5000);
   }
 
   // Borrador de recuperación: si existe al arrancar, la app murió con trabajo sin guardar
@@ -64,8 +81,18 @@ export default function App() {
             `Hay un borrador de recuperación de "${draft.name}"${when ? ` (${when})` : ""} — la app se cerró sin guardar.\n\nAceptar = restaurarlo · Cancelar = descartarlo (se borra).`
           );
           if (restore) {
-            const project = deserialize(draft.json);
+            let project;
+            try {
+              project = deserialize(draft.json);
+            } catch (e) {
+              // Un borrador dañado no se puede restaurar jamás: se borra o el aviso volvería en cada arranque
+              await window.station.draftClear().catch(() => {});
+              throw new Error(
+                `El borrador de recuperación estaba dañado y se descartó${e instanceof Error ? `: ${e.message}` : "."}`
+              );
+            }
             dispatch({ type: "loadProject", project, dirty: true });
+            setProjectEpoch((n) => n + 1);
             setCurrentPath(draft.filePath);
             showToast("ok", `Borrador restaurado: "${project.name}" — asiéntalo con Cmd+S.`);
           } else {
@@ -122,6 +149,7 @@ export default function App() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (!(e.metaKey || e.ctrlKey)) return;
+      if (modalOpen || !draftReady) return; // con un diálogo abierto (o el prompt de borrador sin resolver), Cmd+S/O no actúan
       const k = e.key.toLowerCase();
       if (k === "s") {
         e.preventDefault();
@@ -161,9 +189,14 @@ export default function App() {
       showToast("error", "Espera a que termine el guardado actual.");
       return;
     }
+    if (exportInFlight.current) {
+      showToast("error", "Espera a que termine la exportación.");
+      return;
+    }
     if (dirty && !window.confirm("¿Empezar de cero? Se descartará lo que no hayas guardado.")) return;
     clearCaches();
     dispatch({ type: "newProject" });
+    setProjectEpoch((n) => n + 1);
     setCurrentPath(null);
     setEditingDocId(null);
   }
@@ -201,14 +234,24 @@ export default function App() {
       showToast("error", "Espera a que termine el guardado actual.");
       return;
     }
+    if (exportInFlight.current) {
+      showToast("error", "Espera a que termine la exportación.");
+      return;
+    }
     // Protección de trabajo: abrir encima descarta el proyecto actual
     if (dirty && !window.confirm("Hay cambios sin guardar. ¿Abrir otro proyecto y descartarlos?")) return;
     try {
       const res = await window.station.openProjectDialog();
       if (!res) return;
       const loaded = deserialize(res.json);
+      // Una exportación pudo empezar mientras el diálogo estaba abierto
+      if (exportInFlight.current) {
+        showToast("error", "Espera a que termine la exportación.");
+        return;
+      }
       clearCaches();
       dispatch({ type: "loadProject", project: loaded });
+      setProjectEpoch((n) => n + 1);
       setCurrentPath(res.path);
       setEditingDocId(null);
       showToast(
@@ -221,6 +264,8 @@ export default function App() {
   }
 
   async function handleExport() {
+    if (exportInFlight.current) return;
+    exportInFlight.current = true;
     setExporting(true);
     try {
       const bytes = await exportProject(project);
@@ -229,20 +274,16 @@ export default function App() {
     } catch (e) {
       showToast("error", e instanceof Error ? e.message : "Error al exportar.");
     } finally {
+      exportInFlight.current = false;
       setExporting(false);
     }
   }
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
-      <header className="app-header">
+      {/* inert hasta resolver el prompt de borrador: lo editado antes se perdería al aceptar */}
+      <header className="app-header" inert={!draftReady}>
         <div className="app-identity">
-          <img
-            src={badgeUrl}
-            alt=""
-            className="app-logo"
-            draggable={false}
-          />
           <div className="app-identity-copy">
             <div className="app-identity-title">
               <span>SANDY.SYSDEV</span>
@@ -259,6 +300,8 @@ export default function App() {
           className="btn-ghost header-secondary panel-toggle"
           onClick={() => setShowPanel((v) => !v)}
           title={showPanel ? "Cerrar panel" : "Abrir panel"}
+          aria-label={showPanel ? "Cerrar panel izquierdo" : "Abrir panel izquierdo"}
+          aria-expanded={showPanel}
         >
           {showPanel ? "‹" : "›"}
         </button>
@@ -302,15 +345,23 @@ export default function App() {
                   ? "⚠ Documento sin actualizar"
                   : "⚡ EXPORTAR PDF"}
           </button>
-          <button className="btn-ghost header-secondary" onClick={toggle} title="Cambiar tema">
+          <button
+            className="btn-ghost header-secondary"
+            onClick={toggle}
+            title="Cambiar tema"
+            aria-label={dark ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
+          >
             {dark ? "◑" : "◐"}
           </button>
         </div>
       </header>
 
-      <main className="flex min-h-0 flex-1">
+      <main className="flex min-h-0 flex-1" inert={!draftReady} aria-busy={!draftReady}>
         {showPanel && (
           <LeftPanel
+            key={projectEpoch}
+            projectEpoch={projectEpoch}
+            currentProjectEpoch={() => projectEpochRef.current}
             editingDocId={editingDocId}
             onOpenDoc={openDoc}
             onOpenPdf={openReaderAt}
@@ -341,14 +392,26 @@ export default function App() {
 
       {toast && (
         <div
-          className="card-retro fixed right-4 bottom-14 z-50 max-w-[360px] px-4 py-3 text-[12px]"
+          role={toast.kind === "error" ? "alert" : "status"}
+          aria-live={toast.kind === "error" ? "assertive" : "polite"}
+          className="card-retro fixed right-4 bottom-14 z-50 flex max-w-[360px] items-start gap-3 px-4 py-3 text-[12px]"
           style={{
             fontFamily: "var(--mono)",
             color: toast.kind === "error" ? "var(--danger)" : "var(--text)",
             borderColor: toast.kind === "error" ? "var(--danger)" : "var(--accent)"
           }}
         >
-          {toast.msg}
+          <span className="min-w-0 flex-1">{toast.msg}</span>
+          {toast.kind === "error" && (
+            <button
+              className="shrink-0 rounded px-1 text-[12px]"
+              aria-label="Cerrar aviso de error"
+              title="Cerrar"
+              onClick={() => setToast(null)}
+            >
+              ✕
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -3,7 +3,9 @@ import type { PageRef } from "../../../shared/types";
 interface ReconcileDocPagesOptions {
   pages: PageRef[];
   docId: string;
-  previousPageCount: number;
+  /** null = el PDF anterior no se pudo leer: se usa la página más alta que sigue en el organizador.
+   *  Límite aceptado: si todas sus páginas estaban borradas (o las últimas), esas vuelven. */
+  previousPageCount: number | null;
   nextPageCount: number;
   createId: () => string;
 }
@@ -24,7 +26,10 @@ export function reconcileDocPages({
   nextPageCount,
   createId
 }: ReconcileDocPagesOptions): PageRef[] {
-  const safePreviousCount = Math.max(0, Math.trunc(previousPageCount));
+  const knownPreviousCount =
+    previousPageCount ??
+    pages.reduce((max, page) => (page.srcId === docId ? Math.max(max, page.pageIndex + 1) : max), 0);
+  const safePreviousCount = Math.max(0, Math.trunc(knownPreviousCount));
   const safeNextCount = Math.max(0, Math.trunc(nextPageCount));
   const surviving = pages.filter((page) => page.srcId !== docId || page.pageIndex < safeNextCount);
   const represented = new Set(

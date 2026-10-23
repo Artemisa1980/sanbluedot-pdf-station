@@ -69,3 +69,40 @@ test("records the signature a document was compiled with", () => {
   const next = reducer(state, { type: "setDocPages", docId: "doc", compiledB64: "AA==", previousPageCount: 0, pageCount: 1, compiledSig: "sig-1" });
   assert.equal(next.project.docs[0].compiledSig, "sig-1");
 });
+
+test("drops a compilation based on an older compiled PDF than the one already stored", () => {
+  const state = emptyState();
+  state.project.docs.push({ id: "d", name: "a.md", kind: "md", content: "x", preset: "sanbluedot", compiledB64: "NEW=" });
+  state.project.pages.push({ id: "p0", srcId: "d", srcKind: "doc", pageIndex: 0, rotation: 0, background: null, patches: [] });
+  const stale = { type: "setDocPages", docId: "d", compiledB64: "OTHER=", compiledSig: "s", previousPageCount: 0, pageCount: 3, basedOnB64: "OLD=" };
+  assert.equal(reducer(state, stale), state, "a result read from OLD= would re-add deleted pages");
+  const fresh = reducer(state, { ...stale, basedOnB64: "NEW=", previousPageCount: 1 });
+  assert.equal(fresh.project.docs[0].compiledB64, "OTHER=");
+  assert.equal(fresh.project.pages.length, 3);
+});
+
+test("movePages with the Alt+Arrow indices moves a page or a block exactly one slot", () => {
+  // The Organizer nudges with toIndex = first - 1 (left) or last + 2 (right)
+  const state = emptyState();
+  state.project.pdfs.push({ id: "pdf", name: "a.pdf", bytesB64: "AA==" });
+  for (const id of ["a", "b", "c", "d"]) {
+    state.project.pages.push({ id, srcId: "pdf", srcKind: "pdf", pageIndex: 0, rotation: 0, background: null, patches: [] });
+  }
+  const order = (s) => s.project.pages.map((p) => p.id).join("");
+  assert.equal(order(reducer(state, { type: "movePages", ids: ["a"], toIndex: 0 + 2 })), "bacd");
+  assert.equal(order(reducer(state, { type: "movePages", ids: ["c"], toIndex: 2 - 1 })), "acbd");
+  // A two-page block (b, c) one slot right and left
+  assert.equal(order(reducer(state, { type: "movePages", ids: ["b", "c"], toIndex: 2 + 2 })), "adbc");
+  assert.equal(order(reducer(state, { type: "movePages", ids: ["b", "c"], toIndex: 1 - 1 })), "bcad");
+});
+
+test("setDocPages keeps the selection only for pages that still exist", () => {
+  const state = emptyState();
+  state.project.docs.push({ id: "d", name: "a.md", kind: "md", content: "x", preset: "sanbluedot", compiledB64: "OLD=" });
+  for (let i = 0; i < 3; i++) {
+    state.project.pages.push({ id: `p${i}`, srcId: "d", srcKind: "doc", pageIndex: i, rotation: 0, background: null, patches: [] });
+  }
+  state.selection = ["p0", "p2"];
+  const next = reducer(state, { type: "setDocPages", docId: "d", compiledB64: "NEW=", compiledSig: "s", previousPageCount: 3, pageCount: 2, basedOnB64: "OLD=" });
+  assert.deepEqual(next.selection, ["p0"], "p2 was cut off by the shorter recompile");
+});

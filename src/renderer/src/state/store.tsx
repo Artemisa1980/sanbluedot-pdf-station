@@ -40,8 +40,10 @@ export type Action =
       compiledB64: string;
       /** Firma de las entradas con que se compiló (engine/staleness.ts) */
       compiledSig: string;
-      previousPageCount: number;
+      previousPageCount: number | null;
       pageCount: number;
+      /** compiledB64 del que se leyó previousPageCount: si otro resultado llegó antes, este se descarta */
+      basedOnB64?: string | null;
     }
   | { type: "removeSource"; srcId: string }
   | { type: "moveSource"; srcId: string; dir: -1 | 1 }
@@ -124,7 +126,11 @@ export function reducer(state: StationState, action: Action): StationState {
     case "setDocPages": {
       // Una compilación que termina después de borrar el doc (o de Nuevo/Abrir) no tiene dónde
       // ir: sin esto agregaba páginas invisibles y el proyecto guardado ya no se podía abrir
-      if (!project.docs.some((d) => d.id === action.docId)) return state;
+      const target = project.docs.find((d) => d.id === action.docId);
+      if (!target) return state;
+      // Dos compilaciones del mismo doc en vuelo: la segunda traería un conteo previo viejo y
+      // re-agregaría páginas borradas. Se descarta; el vigilante recompila si el texto aún difiere
+      if (action.basedOnB64 !== undefined && target.compiledB64 !== action.basedOnB64) return state;
       const pages = reconcileDocPages({
         pages: project.pages,
         docId: action.docId,

@@ -1,9 +1,10 @@
 import { app, dialog, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from "electron";
-import { readFile, rename, rm, stat, writeFile } from "fs/promises";
+import { readFile, rm, stat } from "fs/promises";
 import { rmSync } from "fs";
 import path from "path";
 import { pathToFileURL } from "url";
 import { htmlToPdf, type HtmlToPdfOptions } from "./htmlToPdf";
+import { atomicWrite, createSerialQueue, draftFilePath, isPdfBytes, projectPath, sanitizeMyStyles } from "./guards";
 
 /** Estado compartido con la ventana: ¿hay cambios sin guardar? (alimenta el aviso al cerrar) */
 export const appState = { dirty: false };
@@ -26,33 +27,23 @@ function requireTrusted(event: IpcMainInvokeEvent): void {
   if (!isTrusted(event)) throw new Error("Solicitud rechazada: ventana no autorizada.");
 }
 
-function projectPath(value: unknown): string | null {
-  return typeof value === "string" && path.isAbsolute(value) && /\.sbstation$/i.test(value)
-    ? path.normalize(value)
-    : null;
-}
-
-async function atomicWrite(target: string, data: string | Buffer): Promise<void> {
-  const tmp = path.join(
-    path.dirname(target),
-    `.${path.basename(target)}.${process.pid}.${Date.now()}.tmp`
-  );
-  try {
-    await writeFile(tmp, data);
-    await rename(tmp, target);
-  } finally {
-    await rm(tmp, { force: true }).catch(() => {});
-  }
-}
-
 /* Autosave de recuperación (v1.6): UN borrador rotativo en userData — un .sbstation
    normal + un meta chiquito (nombre/ruta/fecha) para mostrar info sin parsear el grande. */
 const draftPath = () => path.join(app.getPath("userData"), "draft-recovery.sbstation");
 const draftMetaPath = () => path.join(app.getPath("userData"), "draft-recovery.meta.json");
 const myStylesPath = () => path.join(app.getPath("userData"), "my-styles.json");
+// Escribir y borrar el borrador nunca se pisan: un autosave en vuelo no resucita un borrador ya borrado
+const draftOp = createSerialQueue();
+// Cada borrado al cerrar abre una generación nueva: un autosave que ya venía en camino
+// (de antes del cierre) no puede resucitar el borrador que el cierre acaba de descartar
+let draftGeneration = 0;
+/* Topes de entradas chicas; el JSON del proyecto y del borrador no tiene tope porque lleva los PDFs */
+const MAX_NAME_CHARS = 500;
+const MAX_STYLES_CHARS = 1_000_000;
 
 /** Limpieza síncrona del borrador — el evento close de la ventana no espera promesas. */
 export function clearDraftSync(): void {
+  draftGeneration += 1;
   try {
     rmSync(draftPath(), { force: true });
     rmSync(`${draftPath()}.tmp`, { force: true });
@@ -111,13 +102,15 @@ export function registerIpc(): void {
     if (typeof defaultName !== "string" || typeof bytesB64 !== "string") {
       throw new Error("Datos de exportación inválidos.");
     }
+    const bytes = Buffer.from(bytesB64, "base64");
+    if (!isPdfBytes(bytes)) throw new Error("Datos de exportación inválidos.");
     const res = await dialog.showSaveDialog({
       title: "Exportar PDF",
       defaultPath: path.basename(defaultName),
       filters: [{ name: "PDF", extensions: ["pdf"] }]
     });
     if (res.canceled || !res.filePath) return false;
-    await atomicWrite(res.filePath, Buffer.from(bytesB64, "base64"));
+    await atomicWrite(res.filePath, bytes);
     return true;
   });
 
@@ -169,16 +162,27 @@ export function registerIpc(): void {
         typeof json !== "string" ||
         !meta ||
         typeof meta.name !== "string" ||
+        meta.name.length > MAX_NAME_CHARS ||
         (meta.filePath !== null && typeof meta.filePath !== "string")
       ) {
         throw new Error("Borrador inválido.");
       }
       // Escritura ATÓMICA (tmp + rename): si la máquina muere a mitad de una escritura,
       // el borrador anterior queda intacto — jamás un JSON a medias irrestaurable
-      const tmp = `${draftPath()}.tmp`;
-      await writeFile(tmp, json, "utf-8");
-      await rename(tmp, draftPath());
-      await writeFile(draftMetaPath(), JSON.stringify({ ...meta, savedAt: Date.now() }), "utf-8");
+      const filePath = draftFilePath(meta.filePath, projectPaths.get(e.sender.id));
+      const generation = draftGeneration;
+      await draftOp(async () => {
+        if (generation !== draftGeneration) return;
+        await atomicWrite(draftPath(), json);
+        if (generation === draftGeneration) {
+          await atomicWrite(draftMetaPath(), JSON.stringify({ name: meta.name, filePath, savedAt: Date.now() }));
+        }
+        // El cierre llegó a mitad de la escritura: lo recién escrito se descarta igual
+        if (generation !== draftGeneration) {
+          await rm(draftPath(), { force: true });
+          await rm(draftMetaPath(), { force: true });
+        }
+      });
     }
   );
 
@@ -207,9 +211,11 @@ export function registerIpc(): void {
 
   ipcMain.handle("station:draftClear", async (e) => {
     requireTrusted(e);
-    await rm(draftPath(), { force: true });
-    await rm(`${draftPath()}.tmp`, { force: true });
-    await rm(draftMetaPath(), { force: true });
+    await draftOp(async () => {
+      await rm(draftPath(), { force: true });
+      await rm(`${draftPath()}.tmp`, { force: true });
+      await rm(draftMetaPath(), { force: true });
+    });
   });
 
   ipcMain.handle("station:draftInfo", async (e) => {
@@ -232,8 +238,7 @@ export function registerIpc(): void {
   ipcMain.handle("station:myStylesRead", async (e) => {
     requireTrusted(e);
     try {
-      const list = JSON.parse(await readFile(myStylesPath(), "utf-8"));
-      return Array.isArray(list) ? list : [];
+      return sanitizeMyStyles(JSON.parse(await readFile(myStylesPath(), "utf-8")));
     } catch {
       return [];
     }
@@ -241,8 +246,11 @@ export function registerIpc(): void {
 
   ipcMain.handle("station:myStylesWrite", async (e, list: unknown[]) => {
     requireTrusted(e);
-    if (!Array.isArray(list)) throw new Error("Lista de estilos inválida.");
-    await atomicWrite(myStylesPath(), JSON.stringify(list));
+    const json = Array.isArray(list) ? JSON.stringify(list) : "";
+    if (!Array.isArray(list) || sanitizeMyStyles(list).length !== list.length || json.length > MAX_STYLES_CHARS) {
+      throw new Error("Lista de estilos inválida.");
+    }
+    await atomicWrite(myStylesPath(), json);
   });
 
   ipcMain.handle("station:openProjectDialog", async (e) => {
@@ -258,7 +266,9 @@ export function registerIpc(): void {
     });
     if (res.canceled || res.filePaths.length === 0) return null;
     const p = res.filePaths[0];
+    // La ruta queda autorizada solo si el archivo se leyó: un fallo no deja un destino de guardado
+    const json = await readFile(p, "utf-8");
     projectPaths.set(e.sender.id, p);
-    return { path: p, json: await readFile(p, "utf-8") };
+    return { path: p, json };
   });
 }

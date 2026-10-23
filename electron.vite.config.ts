@@ -17,7 +17,12 @@ export default defineConfig({
         // El servidor de desarrollo necesita localhost; la app empaquetada no se conecta a nada
         name: "production-csp",
         apply: "build",
-        transformIndexHtml: (html: string) => html.replace(" ws://localhost:* http://localhost:*", "")
+        transformIndexHtml: (html: string) => {
+          const out = html.replace(" ws://localhost:* http://localhost:*", "");
+          // Si alguien reformatea la CSP, el build falla en vez de empaquetar localhost en silencio
+          if (out.includes("localhost")) throw new Error("production-csp: la CSP de producción aún permite localhost");
+          return out;
+        }
       }
     ]
   }

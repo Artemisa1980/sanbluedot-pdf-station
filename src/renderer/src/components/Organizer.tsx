@@ -1,6 +1,7 @@
-import { useEffect, useState, type DragEvent, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent } from "react";
 import { useStation } from "../state/store";
 import { effectiveBackground, sourceFor } from "../engine/sources";
+import { useModalOpen } from "./Modal";
 import { PageCard } from "./PageCard";
 import { ReaderView } from "./ReaderView";
 import { Thumbnail } from "./Thumbnail";
@@ -17,8 +18,11 @@ export function Organizer({ openAt, onOpenConsumed }: Props) {
   const [dragIds, setDragIds] = useState<string[] | null>(null);
   const [drop, setDrop] = useState<{ index: number; side: "left" | "right" } | null>(null);
   const [readerId, setReaderId] = useState<string | null>(null); // vista lectura estilo Adobe
+  // Ancla del shift-click: la última página elegida SIN shift (no la última del rango)
+  const anchorId = useRef<string | null>(null);
 
   const pages = project.pages;
+  const modalOpen = useModalOpen();
 
   // Click en un PDF de la cola → lectura en su primera página
   useEffect(() => {
@@ -34,7 +38,8 @@ export function Organizer({ openAt, onOpenConsumed }: Props) {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const t = e.target as HTMLElement;
-      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable) return;
+      if (modalOpen) return; // las páginas ocultas bajo un diálogo no se tocan
+      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.tagName === "BUTTON" || t.isContentEditable) return;
       if (readerId) return; // la vista lectura maneja sus propias teclas
       if ((e.key === "Delete" || e.key === "Backspace") && selection.length > 0) {
         e.preventDefault();
@@ -46,29 +51,42 @@ export function Organizer({ openAt, onOpenConsumed }: Props) {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selection, pages, dispatch, readerId]);
+  }, [selection, pages, dispatch, readerId, modalOpen]);
 
   function openReader(id: string) {
     setReaderId(id);
     dispatch({ type: "select", ids: [id] });
   }
 
-  function handleSelect(e: MouseEvent, page: PageRef, index: number) {
+  function handleSelect(e: MouseEvent | ReactKeyboardEvent, page: PageRef, index: number) {
     e.stopPropagation();
     if (e.shiftKey && selection.length > 0) {
-      const anchorId = selection[selection.length - 1];
-      const anchorIdx = pages.findIndex((p) => p.id === anchorId);
+      const anchorIdx = pages.findIndex((p) => p.id === (anchorId.current ?? selection[selection.length - 1]));
       if (anchorIdx !== -1) {
         const [a, b] = anchorIdx < index ? [anchorIdx, index] : [index, anchorIdx];
         dispatch({ type: "select", ids: pages.slice(a, b + 1).map((p) => p.id) });
         return;
       }
     }
+    anchorId.current = page.id;
     if (e.metaKey || e.ctrlKey) {
       dispatch({ type: "toggleSelect", id: page.id });
     } else {
       dispatch({ type: "select", ids: [page.id] });
     }
+  }
+
+  /** Alt+flecha sobre una tarjeta: mueve la página (o toda su selección) una posición. */
+  function handleNudge(page: PageRef, dir: -1 | 1) {
+    const ids = selection.includes(page.id) ? selection : [page.id];
+    const idxs = pages.flatMap((p, i) => (ids.includes(p.id) ? [i] : []));
+    if (idxs.length === 0) return;
+    const first = idxs[0];
+    const last = idxs[idxs.length - 1];
+    if ((dir === -1 && first === 0) || (dir === 1 && last === pages.length - 1)) return;
+    dispatch({ type: "movePages", ids, toIndex: dir === -1 ? first - 1 : last + 2 });
+    // Mover el nodo en el DOM suelta el foco: se devuelve a la tarjeta tras el render
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-page-id="${page.id}"]`)?.focus());
   }
 
   function handleDragStart(e: DragEvent, page: PageRef) {
@@ -86,7 +104,7 @@ export function Organizer({ openAt, onOpenConsumed }: Props) {
     setDrop({ index, side });
   }
 
-  function handleDrop(e: DragEvent, index: number) {
+  function handleDrop(e: DragEvent) {
     e.preventDefault();
     if (!dragIds || !drop) return;
     const toIndex = drop.index + (drop.side === "right" ? 1 : 0);
@@ -104,6 +122,7 @@ export function Organizer({ openAt, onOpenConsumed }: Props) {
     <button
       className={`btn-ghost${danger ? " btn-danger" : ""}`}
       title={title}
+      aria-label={title}
       disabled={selection.length === 0}
       onClick={onClick}
     >
@@ -161,7 +180,12 @@ export function Organizer({ openAt, onOpenConsumed }: Props) {
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4">
+            <div
+              className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4"
+              role="listbox"
+              aria-multiselectable="true"
+              aria-label="Páginas del documento (Alt + flechas para reordenar)"
+            >
               {pages.map((p, i) => {
                 const src = sourceFor(project, p);
                 if (!src) return null;
@@ -175,9 +199,10 @@ export function Organizer({ openAt, onOpenConsumed }: Props) {
                     dropSide={drop?.index === i ? drop.side : null}
                     onSelect={(e) => handleSelect(e, p, i)}
                     onOpen={() => openReader(p.id)}
+                    onNudge={(dir) => handleNudge(p, dir)}
                     onDragStart={(e) => handleDragStart(e, p)}
                     onDragOver={(e) => handleDragOver(e, i)}
-                    onDrop={(e) => handleDrop(e, i)}
+                    onDrop={handleDrop}
                     onDragEnd={handleDragEnd}
                   >
                     <Thumbnail
