@@ -86,6 +86,7 @@ npm run build      # production bundle in out/
 ```bash
 npm run dist:mac   # → release/sanblueᵈᵒᵗ pdf-station-<version>-arm64.dmg
 npm run dist:win   # → release/ NSIS installer (run on Windows)
+npm run dist:win:zip   # → release/ portable Windows x64 zip (runs on Apple silicon)
 ```
 
 The app is not Apple-signed (personal use): on first launch, **right-click → Open**,
