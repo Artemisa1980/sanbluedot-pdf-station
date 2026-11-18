@@ -24,11 +24,16 @@ dmg:
 
 win:
   icon: resources/icon.png
+  # Nombre del zip portable (dist:win:zip). Vive aquí y no en el script: las comillas del
+  # script se rompían en cmd.exe (simples) o en sh (dobles expanden ${...})
+  artifactName: "${productName}-${version}-win-${arch}.${ext}"
   target:
     - target: nsis
       arch: [x64]
 
 nsis:
+  # El instalador conserva el nombre por defecto de electron-builder
+  artifactName: "${productName} Setup ${version}.${ext}"
   oneClick: false
   allowToChangeInstallationDirectory: true
 

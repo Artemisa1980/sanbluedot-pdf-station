@@ -45,7 +45,7 @@ a {
 strong { color: var(--navy); font-weight: 700; }
 em { color: inherit; }
 
-sup, sub { font-size: 0.72em; line-height: 0; }
+sup, sub { font-size: 0.85em; line-height: 0; }
 sup { vertical-align: super; }
 sub { vertical-align: sub; }
 
@@ -106,9 +106,8 @@ pre {
   white-space: pre-wrap;      /* envuelve líneas largas — un PDF no tiene scroll */
   overflow-wrap: break-word;
   word-break: break-word;
-  /* Un bloque largo llena la página en vez de saltar entero y dejar hueco en blanco
-     (Sandy, 2026-07-11). orphans/widows impiden que el corte deje 1-2 líneas sueltas.
-     No cambia la presentación del bloque — solo dónde puede partirse entre páginas. */
+  /* Un bloque largo llena la página en vez de saltar entero y dejar hueco en blanco.
+     orphans/widows impiden que el corte deje 1-2 líneas sueltas. */
   break-inside: auto;
   orphans: 3;
   widows: 3;
@@ -117,8 +116,8 @@ pre code {
   background: none;
   padding: 0;
   color: inherit;
-  font-size: 0.95em; /* relativo al cuerpo: sigue el tamaño de letra del documento */
-  line-height: 1.5;
+  font-size: 0.98em; /* legible y proporcionado al cuerpo del documento */
+  line-height: 1.55;
 }
 
 /* ---------- Tablas de contenido ---------- */
@@ -136,9 +135,21 @@ th, td { border: 1px solid var(--rule); padding: 0.5rem 0.7rem; text-align: left
 th { background: var(--navy); color: #ffffff; font-family: var(--mono); font-weight: 600; }
 tr:nth-child(even) td { background: #f6f8fc; }
 
-/* ---------- Reglas / imágenes ---------- */
+/* ---------- Reglas / imágenes / gráficas vectoriales ---------- */
 hr { border: 0; border-top: 1px solid var(--rule); margin: 2rem 0; }
 img { max-width: 100%; height: auto; break-inside: avoid; }
+.sb-chart {
+  margin: 1.2rem auto;
+  text-align: center;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.sb-chart svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
 
 /* ============================================================
    FIRMA sanblueᵈᵒᵗ  —  masthead (header) + footer

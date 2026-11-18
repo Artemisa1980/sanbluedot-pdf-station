@@ -51,6 +51,17 @@ test("atomicWrite keeps the old target when the write fails", async () => {
   assert.equal(await readFile(target, "utf8"), "original");
 });
 
+test("the import dialog accepts only PDF, Markdown and HTML, like drag and drop", () => {
+  assert.equal(guards.importKind("/Users/a/Libro.PDF"), "pdf");
+  assert.equal(guards.importKind("/Users/a/clase.md"), "md");
+  assert.equal(guards.importKind("/Users/a/clase.markdown"), "md");
+  assert.equal(guards.importKind("/Users/a/pagina.htm"), "html");
+  assert.equal(guards.importKind("/Users/a/pagina.HTML"), "html");
+  for (const other of ["/Users/a/tarea.docx", "/Users/a/foto.png", "/Users/a/notas.txt", "/Users/a/sin-extension", "/Users/a/clase.md.zip"]) {
+    assert.equal(guards.importKind(other), "unsupported", other);
+  }
+});
+
 test("isPdfBytes checks the PDF header", () => {
   assert.equal(guards.isPdfBytes(Buffer.from("%PDF-1.7\n...")), true);
   assert.equal(guards.isPdfBytes(Buffer.from("<html>")), false);

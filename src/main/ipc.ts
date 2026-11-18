@@ -4,7 +4,7 @@ import { rmSync } from "fs";
 import path from "path";
 import { pathToFileURL } from "url";
 import { htmlToPdf, type HtmlToPdfOptions } from "./htmlToPdf";
-import { atomicWrite, createSerialQueue, draftFilePath, isPdfBytes, projectPath, sanitizeMyStyles } from "./guards";
+import { atomicWrite, createSerialQueue, draftFilePath, importKind, isPdfBytes, projectPath, sanitizeMyStyles } from "./guards";
 
 /** Estado compartido con la ventana: ¿hay cambios sin guardar? (alimenta el aviso al cerrar) */
 export const appState = { dirty: false };
@@ -74,10 +74,12 @@ export function registerIpc(): void {
     return Promise.all(
       res.filePaths.map(async (fp) => {
         const name = path.basename(fp);
-        if (/\.pdf$/i.test(fp)) {
-          return { name, kind: "pdf" as const, bytesB64: (await readFile(fp)).toString("base64") };
+        const kind = importKind(fp);
+        if (kind === "pdf") {
+          return { name, kind, bytesB64: (await readFile(fp)).toString("base64") };
         }
-        const kind = /\.(html?|htm)$/i.test(fp) ? ("html" as const) : ("md" as const);
+        // Un .docx o una imagen entraban como Markdown ilegible: no se leen
+        if (kind === "unsupported") return { name, kind };
         return { name, kind, content: await readFile(fp, "utf-8") };
       })
     );

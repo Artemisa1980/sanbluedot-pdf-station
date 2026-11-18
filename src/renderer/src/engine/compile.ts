@@ -1,12 +1,14 @@
 import { marked, type Token, type Tokens } from "marked";
 import { PDFDocument } from "pdf-lib";
 import sanblueCss from "../assets/sanbluedot-pdf.css?raw";
+import katexCss from "../assets/katex.css?raw";
 import { b64ToBytes } from "../../../shared/b64";
 import { evictBytes } from "./bytesCache";
 import { evictSource } from "./thumbnails";
 import { CODE_FONT_FACES, fontById } from "./fonts";
 import { presetById, resolveStyle } from "./presets";
-import { mathCss, mathExtension } from "./math";
+import { mathExtension } from "./math";
+import { plotBlockExtension, setPlotDocStyle } from "./chart";
 import type { DocStyle, SourceDoc, StationProject } from "../../../shared/types";
 
 /* La firma sanblueᵈᵒᵗ NO se inyecta aquí: vive dentro del contenido del documento
@@ -37,6 +39,7 @@ marked.use({
   }
 });
 marked.use(mathExtension);
+marked.use(plotBlockExtension);
 
 /** CSS del estilo granular — pisa al preset. Todo es CSS puro → printToPDF vectorial. */
 function granularCss(style: DocStyle): string {
@@ -62,6 +65,7 @@ export function isDarkPaper(hex: string): boolean {
 export function buildDocHtml(doc: SourceDoc): string {
   const preset = presetById(doc.preset);
   const style = resolveStyle(doc);
+  setPlotDocStyle(style);
   // Letra del cuerpo + letras propias del preset (títulos) + Fira completa de los bloques de código
   const faces = [
     ...new Set([fontById(style.fontId).faces, ...(preset.fontIds ?? []).map((id) => fontById(id).faces), CODE_FONT_FACES])
@@ -78,7 +82,7 @@ export function buildDocHtml(doc: SourceDoc): string {
 <style>
 ${faces}
 ${sanblueCss}
-${mathCss}
+${katexCss}
 /* Estación: body transparente para que el fondo por página (capa vectorial del
    organizador) llene TODA la hoja y no solo los márgenes. Sin fondo aplicado se
    ve blanco igual. El estilo del documento lo pisa justo después. */

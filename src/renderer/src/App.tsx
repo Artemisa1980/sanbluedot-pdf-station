@@ -52,6 +52,8 @@ function AppShell() {
   const [saving, setSaving] = useState(false);
   // Estilos vivos: recompila solo los docs cuyo estilo cambió, en cualquier vista
   const recompiling = useAutoRecompile((msg) => showToast("error", msg));
+  // Capítulos sin ⚡ Compilar: todavía no tienen páginas en el documento maestro
+  const uncompiled = project.docs.filter((d) => !d.compiledB64);
   const [currentPath, setCurrentPath] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [toast, setToast] = useState<{ kind: "ok" | "error"; msg: string } | null>(null);
@@ -265,6 +267,12 @@ function AppShell() {
 
   async function handleExport() {
     if (exportInFlight.current) return;
+    // Un capítulo que nunca se compiló no tiene páginas: quedaría fuera del PDF sin aviso
+    if (uncompiled.length > 0) {
+      const names = uncompiled.map((d) => `"${d.name}"`).join(", ");
+      const plural = uncompiled.length > 1;
+      if (!window.confirm(`${names} ${plural ? "no están compilados y no entran" : "no está compilado y no entra"} al PDF. ¿Exportar igual?`)) return;
+    }
     exportInFlight.current = true;
     setExporting(true);
     try {
@@ -357,18 +365,18 @@ function AppShell() {
       </header>
 
       <main className="flex min-h-0 flex-1" inert={!draftReady} aria-busy={!draftReady}>
-        {showPanel && (
-          <LeftPanel
-            key={projectEpoch}
-            projectEpoch={projectEpoch}
-            currentProjectEpoch={() => projectEpochRef.current}
-            editingDocId={editingDocId}
-            onOpenDoc={openDoc}
-            onOpenPdf={openReaderAt}
-            onError={(msg) => showToast("error", msg)}
-            recompiling={recompiling.busy}
-          />
-        )}
+        {/* Cerrar el panel lo oculta sin desmontarlo: la cola de importación y sus PDFs siguen vivos */}
+        <LeftPanel
+          key={projectEpoch}
+          hidden={!showPanel}
+          projectEpoch={projectEpoch}
+          currentProjectEpoch={() => projectEpochRef.current}
+          editingDocId={editingDocId}
+          onOpenDoc={openDoc}
+          onOpenPdf={openReaderAt}
+          onError={(msg) => showToast("error", msg)}
+          recompiling={recompiling.busy}
+        />
 
         {/* Guard: si el doc abierto ya no existe (eliminado / proyecto nuevo), volver al organizador */}
         {editingDocId && project.docs.some((d) => d.id === editingDocId) ? (
@@ -385,6 +393,22 @@ function AppShell() {
       </main>
 
       <footer className="app-footer">
+        <span className="app-status" aria-live="polite">
+          <span className="app-status-dot" aria-hidden="true" />
+          <span>
+            {recompiling.busy.size > 0
+              ? "Actualizando…"
+              : recompiling.stale.size > 0
+                ? "Pendiente"
+                : uncompiled.length > 0
+                  ? `${uncompiled.length} sin compilar`
+                  : "Al día"}
+          </span>
+          <span>{project.pages.length} pág</span>
+          <span>{project.docs.length} doc</span>
+          <span>{project.pageSize === "a4" ? "A4" : "Letter"}</span>
+          <span>{project.margins === "apa" ? "Márgenes APA" : "Márgenes compactos"}</span>
+        </span>
         <span>
           <strong>sanblue<sup>dot</sup></strong> — retro dev-station
         </span>

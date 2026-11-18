@@ -21,9 +21,12 @@ commands, invariants, tests and release rules. Changes per version are in
 - **Write your own content** in Markdown or HTML. Own content is compiled to vector
   PDF through Chromium's print engine and **stays editable forever** — you edit the
   source and recompile, never the output.
-- **Formulas** in Markdown documents: `$…$` inline and `$$` blocks render as real math
-  (KaTeX → MathML at compile time), static and vector. Money such as `$200` stays text.
-  HTML documents keep their dollar signs as written.
+- **Formulas** in Markdown documents: `$…$` and `\(…\)` inline, `$$…$$` and `\[…\]` as
+  display formulas, rendered by KaTeX with embedded fonts at compile time, static and
+  vector. Money such as `$200` stays text. HTML documents keep their dollar signs as written.
+- **Vector charts** in Markdown documents: a fenced `plot` block with a JSON spec draws a
+  function or data series as pure SVG (Observable Plot), with the document's font and
+  colors. Point labels are placed per point from the chart panel.
 - **Live styling per document**: six base presets (sanbluedot retro dev-station ·
   Sage Orgánico · Crema Retro 80s · Noche Navy · Máquina de Escribir · Terminal Ámbar)
   plus granular control — 12 curated embedded typefaces, size, line height, text/paper
@@ -96,7 +99,7 @@ or System Settings → Privacy & Security → "Open Anyway".
 
 Electron 43 + electron-vite · React 19 + TypeScript · Tailwind 4 ·
 pdf-lib (vector engine) · pdfjs-dist (on-screen thumbnails only) ·
-marked (MD→HTML) · KaTeX (formulas → MathML) · 12 embedded typefaces — serif (Charter*,
+marked (MD→HTML) · KaTeX (formulas) · Observable Plot (vector charts) · 12 embedded typefaces — serif (Charter*,
 Instrument Serif, Lora, Merriweather, IBM Plex Serif, Georgia*), sans (Outfit, Space
 Grotesk, Inter, Helvetica*), mono (Fira Code, IBM Plex Mono) — all offline, embedded as
 real vector glyphs in the PDF. (*system fonts)

@@ -35,6 +35,15 @@ export function draftFilePath(requested: unknown, registered: string | undefined
   return p !== null && p === registered ? p : null;
 }
 
+/** Tipo de un archivo elegido para importar, por su extensión. «Todos los archivos» deja elegir
+ *  cualquier cosa: solo PDF, Markdown y HTML entran, igual que al arrastrar. */
+export function importKind(filePath: string): "pdf" | "md" | "html" | "unsupported" {
+  if (/\.pdf$/i.test(filePath)) return "pdf";
+  if (/\.(md|markdown)$/i.test(filePath)) return "md";
+  if (/\.html?$/i.test(filePath)) return "html";
+  return "unsupported";
+}
+
 /** Bytes que de verdad son un PDF (cabecera %PDF-). */
 export function isPdfBytes(bytes: Buffer): boolean {
   return bytes.subarray(0, 5).toString("latin1") === "%PDF-";

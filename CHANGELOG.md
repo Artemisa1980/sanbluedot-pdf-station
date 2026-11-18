@@ -2,6 +2,49 @@
 
 Earlier versions are described in the [GitHub Releases](https://github.com/Artemisa1980/sanbluedot-pdf-station/releases).
 
+## 1.12.0 — 2026-11-18
+
+### Added
+
+- Vector charts: a fenced `plot` block draws functions and data series as pure SVG with
+  the document's font and colors. A chart panel edits title, ranges, axes and each
+  point label (side buttons, offsets, alignment, dot).
+- Formulas also accept `$$…$$` on one line, `$$` with content on its opening or closing
+  line, `\[…\]` and `\(…\)`.
+- Left panel tabs (Proyecto, Estilo, Gráficas) and a status line in the footer.
+
+### Changed
+
+- Formulas render through KaTeX HTML output with its fonts embedded.
+- Superscripts and subscripts are larger (0.85 em instead of 0.72 em), and code blocks use
+  0.98 em with a 1.55 line height (was 0.95 em and 1.5).
+- The night theme uses a navy palette with gold labels; the structure matches the light theme.
+- `npm run dist:win:zip` takes the zip name from `electron-builder.yml`, so it runs the same from
+  `sh` and `cmd.exe`.
+
+### Fixed
+
+- Chart point labels now honor their own `dx`, `dy` and `anchor`, and no longer sit on
+  top of their dot.
+- The x-axis title no longer overlaps the tick numbers.
+- The chart panel shows the ranges the chart really uses.
+- Two `$$…$$` formulas on one line render as two formulas instead of one KaTeX error.
+- A curve beyond `yDomain` is cut at the chart frame instead of crossing the axes.
+- `log` is the base-10 logarithm; `ln` stays the natural one.
+- Long Y-axis numbers such as `100,000` widen the left margin instead of being cut.
+- An unknown variable or function, a malformed number (`1.2.3`) or a point without a value
+  shows the chart error box instead of an empty or silently wrong chart.
+- A line breaks at an asymptote (`1/x`, `tan x`) instead of drawing a false vertical.
+- A shaded area with `opacity: 0` stays invisible.
+- A point without `y` sits on the first series formula when the chart has no `fn`.
+- The chart panel returns Y to automatic (**Auto**), keeps a one-line block on one line,
+  and no longer counts a `plot` example inside a code fence.
+- Panel tabs follow the WAI-ARIA tab pattern: arrow, Home and End keys.
+- The footer shows chapters that were never compiled, and export asks before leaving them out.
+- Collapsing the left panel keeps PDFs that are still in the import queue.
+- The import dialog rejects files that are not PDF, Markdown or HTML, like drag and drop.
+- Delete or Backspace in the organizer asks before removing pages.
+
 ## 1.11.1
 
 ### Changed

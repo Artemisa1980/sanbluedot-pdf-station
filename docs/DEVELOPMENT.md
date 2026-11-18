@@ -27,7 +27,7 @@ are everything needed to build, test and release it.
 | Command | What it proves |
 |---|---|
 | `npm install` | Dependencies. npm 12 blocks install scripts; Electron downloads its binary on first run (`node node_modules/electron/install.js` forces it). |
-| `npm test` | Regression suites: page reconciliation, project schema, reducer, compiled HTML and staleness, formulas, vector export, main-process rules, thumbnail cache. Set `CI=1` to fail instead of skipping when Poppler is missing. |
+| `npm test` | Regression suites: page reconciliation, project schema, reducer, compiled HTML and staleness, formulas, charts and plot blocks, vector export, main-process rules, thumbnail cache. Set `CI=1` to fail instead of skipping when Poppler is missing. |
 | `npm run lint` | TypeScript, renderer and main/preload projects. |
 | `npm run build` | Production bundle in `out/`. |
 | `npm run dev` | Development app with hot reload. Changes under `src/main/` or `src/preload/` restart Electron and drop an unsaved project. |

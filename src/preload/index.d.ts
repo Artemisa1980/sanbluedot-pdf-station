@@ -3,7 +3,8 @@ import type { CustomStylePreset, MarginPreset, PageSize } from "../shared/types"
 /** Un archivo importable: PDF (bytes) o documento MD/HTML (texto) */
 export type ImportedFile =
   | { name: string; kind: "pdf"; bytesB64: string }
-  | { name: string; kind: "md" | "html"; content: string };
+  | { name: string; kind: "md" | "html"; content: string }
+  | { name: string; kind: "unsupported" };
 
 export interface StationApi {
   importFilesDialog(): Promise<ImportedFile[]>;

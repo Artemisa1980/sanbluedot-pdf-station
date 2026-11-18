@@ -43,6 +43,9 @@ export function Organizer({ openAt, onOpenConsumed }: Props) {
       if (readerId) return; // la vista lectura maneja sus propias teclas
       if ((e.key === "Delete" || e.key === "Backspace") && selection.length > 0) {
         e.preventDefault();
+        // Una tecla suelta no borra páginas sin preguntar: no hay deshacer (el botón Eliminar sí es directo)
+        const n = selection.length;
+        if (!window.confirm(n === 1 ? "¿Eliminar la página seleccionada?" : `¿Eliminar las ${n} páginas seleccionadas?`)) return;
         dispatch({ type: "removePages", ids: selection });
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {
         e.preventDefault();

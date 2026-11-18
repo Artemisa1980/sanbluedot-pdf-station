@@ -1,4 +1,4 @@
-import { useId, useState, type DragEvent } from "react";
+import { useEffect, useId, useState, type DragEvent, type KeyboardEvent } from "react";
 import { newId, useStation } from "../state/store";
 import { bytesFor, evictBytes } from "../engine/bytesCache";
 import { evictSource } from "../engine/thumbnails";
@@ -9,6 +9,7 @@ import { useMyStyles } from "../state/useMyStyles";
 import { DraftsModal } from "./DraftsModal";
 import { PagePicker } from "./PagePicker";
 import { PatchEditor } from "./PatchEditor";
+import { PlotAdjustSection } from "./PlotAdjustSection";
 import { pdfImportProblem } from "../engine/exportProject";
 import { isDarkPaper } from "../engine/compile";
 import { b64ToBytes, bytesToB64 } from "../../../shared/b64";
@@ -64,6 +65,8 @@ const SWATCHES: Array<{ label: string; color: string }> = [
 ];
 
 interface Props {
+  /** Panel cerrado: se oculta sin desmontarse, así la cola de importación no se pierde */
+  hidden?: boolean;
   /** Proyecto para el que se montó el panel; sube en Nuevo/Abrir/restaurar */
   projectEpoch: number;
   /** Proyecto abierto ahora mismo (lee el valor actual, no el del render) */
@@ -79,12 +82,36 @@ interface Props {
 }
 
 /** Panel izquierdo único: proyecto + cola de documentos + control estético. */
-export function LeftPanel({ projectEpoch, currentProjectEpoch, editingDocId, onOpenDoc, onOpenPdf, onError, recompiling }: Props) {
+type PanelTab = "proyecto" | "estilo" | "graficas";
+const PANEL_TABS: Array<{ id: PanelTab; label: string }> = [
+  { id: "proyecto", label: "Proyecto" },
+  { id: "estilo", label: "Estilo" },
+  { id: "graficas", label: "Gráficas" }
+];
+
+export function LeftPanel({ hidden = false, projectEpoch, currentProjectEpoch, editingDocId, onOpenDoc, onOpenPdf, onError, recompiling }: Props) {
   const { project, selection, dispatch } = useStation();
   const [queue, setQueue] = useState<ImportedPdf[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [patchTarget, setPatchTarget] = useState<{ pageId: string; patch: Patch | null } | null>(null);
   const [showDrafts, setShowDrafts] = useState(false);
+  const [tab, setTab] = useState<PanelTab>("proyecto");
+  const tabIds = useId();
+
+  function onTabKey(e: KeyboardEvent<HTMLDivElement>) {
+    const order = PANEL_TABS.map((t) => t.id);
+    const i = order.indexOf(tab);
+    const next =
+      e.key === "ArrowRight" ? order[(i + 1) % order.length]
+      : e.key === "ArrowLeft" ? order[(i - 1 + order.length) % order.length]
+      : e.key === "Home" ? order[0]
+      : e.key === "End" ? order[order.length - 1]
+      : null;
+    if (!next) return;
+    e.preventDefault();
+    setTab(next);
+    document.getElementById(`${tabIds}-tab-${next}`)?.focus();
+  }
 
   /* ---------- importación (diálogo + drag & drop desde Finder) ---------- */
 
@@ -131,6 +158,8 @@ export function LeftPanel({ projectEpoch, currentProjectEpoch, editingDocId, onO
       try {
         if (f.kind === "pdf") {
           await queuePdf(f.name, b64ToBytes(f.bytesB64), f.bytesB64);
+        } else if (f.kind === "unsupported") {
+          onError(`"${f.name}" no se puede importar: solo PDF, Markdown (.md) o HTML.`);
         } else {
           const id = addDocFromFile(f.name, f.kind, f.content);
           if (!firstDoc) firstDoc = id;
@@ -256,15 +285,49 @@ export function LeftPanel({ projectEpoch, currentProjectEpoch, editingDocId, onO
 
   const singleSrc = singlePdfPage ? sourceFor(project, singlePdfPage) : null;
 
+  // Abrir un documento o seleccionar páginas lleva a Estilo: ahí están sus controles
+  const hasStyleTarget = Boolean(activeDocId) || selectedPages.length > 0;
+  useEffect(() => {
+    if (hasStyleTarget) setTab((t) => (t === "proyecto" ? "estilo" : t));
+  }, [hasStyleTarget, activeDocId]);
+
   function patchStyle(doc: SourceDoc, patch: Partial<DocStyle>) {
     dispatch({ type: "updateDoc", docId: doc.id, patch: { style: { ...resolveStyle(doc), ...patch } } });
   }
 
   return (
     <aside
+      hidden={hidden}
       className="flex w-[312px] shrink-0 flex-col gap-3 overflow-auto border-r p-3"
       style={{ background: "var(--app-bg)", borderColor: "var(--border)" }}
     >
+      {/* Pestañas: las secciones siguen montadas (hidden), así la cola de importación no se pierde.
+          Teclado (patrón WAI-ARIA): flechas, Inicio y Fin cambian de pestaña; Tab entra al panel. */}
+      <div className="panel-tabs" role="tablist" aria-label="Secciones del panel" onKeyDown={onTabKey}>
+        {PANEL_TABS.map((t) => (
+          <button
+            key={t.id}
+            id={`${tabIds}-tab-${t.id}`}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            aria-controls={`${tabIds}-panel-${t.id}`}
+            tabIndex={tab === t.id ? 0 : -1}
+            className="panel-tab"
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div
+        className="flex flex-col gap-3"
+        role="tabpanel"
+        id={`${tabIds}-panel-proyecto`}
+        aria-labelledby={`${tabIds}-tab-proyecto`}
+        hidden={tab !== "proyecto"}
+      >
       {/* ══ PROYECTO ══ */}
       <section className="card-retro p-3">
         <div className="section-label mb-2">Proyecto</div>
@@ -459,9 +522,16 @@ export function LeftPanel({ projectEpoch, currentProjectEpoch, editingDocId, onO
           </button>
         </div>
       </section>
+      </div>
 
       {/* ══ CONTROL ESTÉTICO ══ */}
-      <section className="card-retro p-3">
+      <section
+        className="card-retro p-3"
+        role="tabpanel"
+        id={`${tabIds}-panel-estilo`}
+        aria-labelledby={`${tabIds}-tab-estilo`}
+        hidden={tab !== "estilo"}
+      >
         <div className="mb-2 flex items-center justify-between">
           <div className="section-label">Control estético</div>
           {activeDoc && recompiling.has(activeDoc.id) && (
@@ -593,6 +663,32 @@ export function LeftPanel({ projectEpoch, currentProjectEpoch, editingDocId, onO
           </p>
         )}
       </section>
+
+      {/* ══ AJUSTE DE GRÁFICAS VECTORIALES (PLOT) ══ */}
+      <div
+        role="tabpanel"
+        id={`${tabIds}-panel-graficas`}
+        aria-labelledby={`${tabIds}-tab-graficas`}
+        hidden={tab !== "graficas"}
+      >
+        {/* Se monta solo con la pestaña abierta: analiza el documento entero en cada cambio de texto */}
+        {tab !== "graficas" ? null : activeDoc && activeDoc.kind === "md" ? (
+          <PlotAdjustSection
+            key={activeDoc.id} /* remonta por documento para resetear índices seleccionados */
+            doc={activeDoc}
+            onUpdateContent={(content) =>
+              dispatch({ type: "updateDoc", docId: activeDoc.id, patch: { content } })
+            }
+          />
+        ) : (
+          <section className="card-retro p-3">
+            <div className="section-label mb-2">Ajuste de gráficas</div>
+            <p className="text-[11px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
+              Abre un documento Markdown: aquí aparecen sus gráficas (bloques <code>```plot</code>).
+            </p>
+          </section>
+        )}
+      </div>
 
       {current && (
         <PagePicker

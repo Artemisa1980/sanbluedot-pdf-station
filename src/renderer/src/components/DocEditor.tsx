@@ -30,6 +30,7 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
   const doc = project.docs.find((d) => d.id === docId);
 
   const [content, setContent] = useState(doc?.content ?? "");
+  const lastDispatchedRef = useRef(doc?.content ?? "");
   const [previewB64, setPreviewB64] = useState<string | null>(doc?.compiledB64 ?? null);
   const [building, setBuilding] = useState(false);
   const [compiling, setCompiling] = useState(false);
@@ -39,6 +40,14 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
   const [savedFlash, setSavedFlash] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const buildToken = useRef(0);
+
+  // Sincronizar contenido si se modifica externamente (ej. panel de Ajuste de Gráficas en LeftPanel)
+  useEffect(() => {
+    if (doc?.content !== undefined && doc.content !== lastDispatchedRef.current) {
+      lastDispatchedRef.current = doc.content;
+      setContent(doc.content);
+    }
+  }, [doc?.content]);
 
   const previewSrcId = `preview:${docId}`;
   const style = doc ? resolveStyle(doc) : null;
@@ -93,6 +102,7 @@ export function DocEditor({ docId, view, onViewChange, onClose }: Props) {
 
   function updateContent(next: string) {
     setContent(next);
+    lastDispatchedRef.current = next;
     dispatch({ type: "updateDoc", docId, patch: { content: next } });
   }
 
